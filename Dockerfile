@@ -26,3 +26,4 @@ COPY --from=server-build /app/publish ./
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD curl --fail --silent http://127.0.0.1:8080/health || exit 1
 ENTRYPOINT ["dotnet", "Battleship.Server.dll"]
+CMD ["--urls", "http://0.0.0.0:8080"]

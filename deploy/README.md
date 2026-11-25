@@ -9,6 +9,8 @@ The app keeps room state in memory, so run one container instance. A restart cle
 
 Nginx listens on public port 5228 and sends both the page and `/hub/` to `127.0.0.1:5227` (container port 8080). The hub uses a WebSocket-aware proxy with a longer idle timeout. Only public TCP port 5228 is needed. The browser uses `/hub/game` at the same address as the page, with no dependency on the player's localhost or VS Code port forwarding.
 
+The container starts with `--urls http://0.0.0.0:8080` to override the native deployment's `Urls` setting (5228). Keep the Compose `command` override when updating existing installations. An `ASPNETCORE_URLS` host setting alone can be overridden by the app's `Urls` setting.
+
 Replace the old Battleship Nginx configuration instead of enabling a second copy. From the repository root on the server:
 
 ```bash
