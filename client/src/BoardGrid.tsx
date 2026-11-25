@@ -40,8 +40,6 @@ export function BoardGrid({ cell, ariaLabel, ships = [] }: {
 
 export function ShotMark({ status }: { status: string }) {
   return <span className="shot-mark" aria-hidden="true"><svg viewBox="0 0 32 32">
-    {status === 'Miss' ? <circle cx="16" cy="16" r="7" /> : status === 'Sunk' || status === 'Won'
-      ? <><path d="M7 7H25V25H7Z M10 10L22 22 M22 10L10 22" /></>
-      : <path d="M8 8L24 24 M24 8L8 24" />}
+    {status === 'Miss' ? <circle cx="16" cy="16" r="7" /> : <path d="M8 8L24 24 M24 8L8 24" />}
   </svg></span>
 }

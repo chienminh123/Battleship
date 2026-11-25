@@ -259,11 +259,14 @@ function GameOverScreen({ state, busy, onRematch, onLeave }: { state: HubState; 
     <div className="game-over-actions"><button className="primary-action" disabled={busy} onClick={onRematch}>{busy ? 'Đang chuẩn bị…' : state.isBot ? 'Chơi lại với máy' : 'Yêu cầu chơi lại'}</button><button className="secondary-action" onClick={onLeave}>Trở về sảnh</button></div>
     <p className="board-hint" role="status">{state.message}</p>
     <div className="final-boards"><div><h2>Đội tàu đối thủ được tiết lộ</h2><BoardGrid ariaLabel="Vị trí đội tàu đối thủ sau trận đấu" ships={opponent} cell={(cell) => {
-      const hit = opponent.some((ship) => ship.hits.some((part) => cellKey(part) === cellKey(cell)))
-      return <div className={`grid-cell own-cell ${hit ? 'shot-hit' : ''}`}>{hit && <ShotMark status="Hit" />}</div>
+      const ship = opponent.find((item) => item.hits.some((part) => cellKey(part) === cellKey(cell)))
+      const status = ship ? ship.isSunk ? 'Sunk' : 'Hit' : undefined
+      return <div className={`grid-cell own-cell ${status ? `shot-${status.toLowerCase()}` : ''}`}>{status && <ShotMark status={status} />}</div>
     }} /></div><div><h2>Đội tàu của bạn</h2><BoardGrid ariaLabel="Đội tàu của bạn sau trận đấu" ships={state.ownBoard?.ships} cell={(cell) => {
       const shot = state.incomingShots.find((s) => cellKey(s.coordinate) === cellKey(cell))
-      return <div className={`grid-cell own-cell ${shot ? `shot-${shot.status.toLowerCase()}` : ''}`}>{shot && <ShotMark status={shot.status} />}</div>
+      const ship = state.ownBoard?.ships.find((item) => item.cells.some((part) => cellKey(part) === cellKey(cell)))
+      const status = shot ? ship?.isSunk && shot.status !== 'Miss' ? 'Sunk' : shot.status : undefined
+      return <div className={`grid-cell own-cell ${status ? `shot-${status.toLowerCase()}` : ''}`}>{status && <ShotMark status={status} />}</div>
     }} /></div></div>
   </div>
 }

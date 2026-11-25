@@ -105,14 +105,14 @@ kbd { font: 13px var(--mono); border: 1px solid #a6c6ba; padding: 3px 7px; borde
 .shot-legend { display: flex; flex-wrap: wrap; gap: 12px 24px; list-style: none; padding: 0; margin: 16px 0 22px; font-size: 14px; color: #d9e6df; }
 .shot-legend li { display: flex; align-items: center; gap: 8px; }
 .shot-legend i { display: inline-grid; place-items: center; width: 26px; height: 26px; position: relative; border: 1px solid #89a7b9; }
-.legend-unfired { background: #183a50; }.legend-miss { background: #3674a5; }.legend-hit { background: #f6b951; color: #291804; }.legend-sunk { background: #d64f69; color: #fff; }
+.legend-unfired { background: #183a50; }.legend-miss { background: #3674a5; }.legend-hit { background: rgb(246 185 81 / 48%); color: #291804; }.legend-sunk { background: rgb(214 79 105 / 54%); color: #fff; }
 .shot-mark { position: relative; z-index: 3; display: grid; place-items: center; width: 70%; height: 70%; pointer-events: none; }
 .shot-mark svg { display: block; width: 100%; height: 100%; max-width: 38px; max-height: 38px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
 .shot-miss { background: #3674a5; color: #e8f7ff; }
-.shot-hit { background: #f6b951; color: #291804; }
-.shot-sunk,.shot-won { background: #d64f69; color: #fff; }
-.own-cell.shot-hit::before,.own-cell.shot-sunk::before,.own-cell.shot-won::before { content: ''; position: absolute; inset: 13%; z-index: 2; background: #f6b951; border-radius: 4px; }
-.own-cell.shot-sunk::before,.own-cell.shot-won::before { background: #d64f69; }
+.shot-hit { background: rgb(246 185 81 / 42%); color: #291804; }
+.shot-sunk,.shot-won { background: rgb(214 79 105 / 48%); color: #fff; }
+.own-cell.shot-hit::before,.own-cell.shot-sunk::before,.own-cell.shot-won::before { content: ''; position: absolute; inset: 13%; z-index: 2; background: rgb(246 185 81 / 42%); border-radius: 4px; }
+.own-cell.shot-sunk::before,.own-cell.shot-won::before { background: rgb(214 79 105 / 48%); }
 .latest-shot { position: absolute; inset: 3px; border: 2px solid #fff; z-index: 3; pointer-events: none; }
 .battle-layout { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(260px, 1fr); gap: clamp(24px, 4vw, 52px); align-items: start; }
 .board-primary { grid-column: 1; grid-row: 1; }
