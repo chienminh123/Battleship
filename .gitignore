@@ -1,0 +1,6 @@
+**/bin/
+**/obj/
+.vs/
+client/node_modules/
+client/dist/
+.npm-cache/

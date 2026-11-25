@@ -1,0 +1,7 @@
+.git
+.vs
+.npm-cache
+**/bin/
+**/obj/
+client/node_modules/
+client/dist/
