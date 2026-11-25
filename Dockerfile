@@ -20,6 +20,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 ENV ASPNETCORE_HTTP_PORTS=8080
+ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 COPY --from=server-build /app/publish ./
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \

@@ -83,7 +83,7 @@ export function useGameHub() {
 
   useEffect(() => {
     const connection = new HubConnectionBuilder()
-      .withUrl(import.meta.env.DEV ? 'http://localhost:8181/hub/game' : '/hub/game')
+      .withUrl('/hub/game')
       .withAutomaticReconnect([0, 1000, 3000, 5000])
       .configureLogging(LogLevel.Warning)
       .build()
