@@ -2,6 +2,8 @@
 
 Two players can create or join a private room and play the original 10×10 Battleship rules. The ASP.NET server owns the match state; the React client never sees the opposing fleet before the match ends.
 
+The Vietnamese interface also supports playing against a computer. The server generates a valid random fleet and chooses random targets without repeats. Fleet silhouettes stay visible on your own board; the larger board switches with each turn, with manual controls and an option to disable automatic switching. Shot colors and symbols distinguish untried cells, misses, hits, and sunk ships.
+
 ## Run on a server (port 5228)
 
 The production server serves the built React client and `/hub/game` at the same address. Players open `http://SERVER_IP:5228`; the browser connects to that server automatically.
@@ -35,6 +37,8 @@ dotnet test Battleship.slnx
 ```
 
 The SignalR smoke test covers two connected players, invalid fleets, turn enforcement, reconnect history, victory, and rematch. Start the server as above, then run `npm.cmd run test:smoke --prefix client`. Set `BATTLESHIP_HUB_URL` to test a different server URL.
+
+Run `npm.cmd run test:bot --prefix client` against the same server for a complete human/computer match, private bot rooms, placement validation, reconnect, target uniqueness, and rematch. This test can take about three minutes because the computer waits briefly between turns.
 
 ## Deploy
 

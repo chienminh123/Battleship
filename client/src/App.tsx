@@ -1,231 +1,274 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { useGameHub } from './useGameHub'
-import {
-  fleetSpecs,
-  makeDefaultFleet,
-  sameCoordinate,
-  shipLength,
-  type Coordinate,
-  type FleetPlacement,
-  type GameShotStatus,
-  type ShipView,
-  type ShipType,
-} from './types'
+import type { HubState } from './useGameHub'
+import { BoardGrid, ShipDrawing, ShotMark } from './BoardGrid'
+import { cellKey, cellName } from './coordinates'
+import { shipNames, shotNames } from './i18n'
+import { fleetSpecs, makeDefaultFleet, shipLength } from './types'
+import type { Coordinate, FleetPlacement, ShipType, ShipView, ShotHistoryItem } from './types'
 
-const letters = 'ABCDEFGHIJ'.split('')
-const emptyShips: ShipView[] = []
-
-function App() {
-  const { state, createRoom, joinRoom, submitFleet, fire, rematch, leaveRoom } = useGameHub()
-  const [joinCode, setJoinCode] = useState('')
-  const [fleetsByRoom, setFleetsByRoom] = useState<Record<string, FleetPlacement[]>>({})
-  const [selectedShip, setSelectedShip] = useState<ShipType>('Carrier')
-  const [notice, setNotice] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const run = async (action: () => Promise<unknown>, success?: string) => {
-    setBusy(true)
-    try {
-      await action()
-      if (success) setNotice(success)
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'The operation could not be completed.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const handleSubmitFleet = () => run(async () => {
-    const response = await submitFleet(fleet)
-    if (!response.accepted) throw new Error('The server rejected this fleet. Review the marked coordinates.')
-  })
-
-  const hasRoom = Boolean(state.roomCode)
-  const savedFleetKey = state.roomCode && state.player ? `battleship-fleet:${state.roomCode}:${state.player}` : ''
-  const storedFleet = useMemo(() => {
-    if (!savedFleetKey) return undefined
-    const saved = localStorage.getItem(savedFleetKey)
-    if (!saved) return undefined
-    try { return JSON.parse(saved) as FleetPlacement[] } catch { return undefined }
-  }, [savedFleetKey])
-  const submittedFleet = useMemo(() => {
-    if (!state.fleetSubmitted || !state.ownBoard?.ships.length) return undefined
-    return state.ownBoard.ships.map((ship) => ({
-      type: ship.type,
-      start: ship.cells[0],
-      orientation: ship.cells.length > 1 && ship.cells[0].y === ship.cells[1].y ? 'Horizontal' as const : 'Vertical' as const,
-    }))
-  }, [state.fleetSubmitted, state.ownBoard])
-  const fleet = submittedFleet ?? fleetsByRoom[savedFleetKey] ?? storedFleet ?? makeDefaultFleet()
-  const updateFleet = useCallback((update: (current: FleetPlacement[]) => FleetPlacement[]) => {
-    if (!savedFleetKey) return
-    setFleetsByRoom((current) => ({
-      ...current,
-      [savedFleetKey]: update(current[savedFleetKey] ?? storedFleet ?? makeDefaultFleet()),
-    }))
-  }, [savedFleetKey, storedFleet])
-  const handlePlacementCell = (coordinate: Coordinate) => updateFleet((current) => current.map((placement) => placement.type === selectedShip ? { ...placement, start: coordinate } : placement))
-  useEffect(() => {
-    const rotate = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== 'r' || state.phase !== 'Placing') return
-      updateFleet((current) => current.map((placement) => placement.type === selectedShip
-        ? { ...placement, orientation: placement.orientation === 'Horizontal' ? 'Vertical' : 'Horizontal' }
-        : placement))
-    }
-    window.addEventListener('keydown', rotate)
-    return () => window.removeEventListener('keydown', rotate)
-  }, [selectedShip, state.phase, updateFleet])
-  const fleetCells = useMemo(() => buildFleetCells(fleet), [fleet])
-  const ownShips = state.ownBoard?.ships ?? emptyShips
-  const shotMap = useMemo(() => new Map(state.shots.map((shot) => [key(shot.coordinate), shot])), [state.shots])
-  const incomingMap = useMemo(() => new Map<string, { coordinate: Coordinate; status: GameShotStatus; sunkShip?: ShipType }>(state.incomingShots.map((shot) => [key(shot.coordinate), shot])), [state.incomingShots])
-  const receivedMap = useMemo(() => new Map<string, { coordinate: Coordinate; status: GameShotStatus }>((state.ownBoard?.incomingShots ?? []).map((coordinate) => {
-    const hit = ownShips.some((ship) => ship.hits.some((cell) => sameCoordinate(cell, coordinate)))
-    return [key(coordinate), { coordinate, status: hit ? 'Hit' as const : 'Miss' as const }]
-  })), [state.ownBoard, ownShips])
-  const allIncomingMap = useMemo(() => new Map([...receivedMap, ...incomingMap]), [receivedMap, incomingMap])
-  const revealedFleet = state.gameOver?.opponentFleet ?? emptyShips
-  const revealedCells = useMemo(() => new Map(revealedFleet.flatMap((ship) => ship.cells.map((cell) => [key(cell), ship]))), [revealedFleet])
-  useEffect(() => {
-    if (state.phase !== 'Placing' || state.fleetSubmitted || !savedFleetKey) return
-    localStorage.setItem(savedFleetKey, JSON.stringify(fleet))
-  }, [fleet, savedFleetKey, state.fleetSubmitted, state.phase])
-
-  return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div className="brand" aria-label="Battleship fleet command">
-          <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
-          <span>BATTLESHIP <small>/ FLEET COMMAND</small></span>
-        </div>
-        <div className="topbar-meta">
-          <span className={`connection-dot ${state.connected ? 'is-live' : ''}`} />
-          <span>{state.connected ? 'LINK ACTIVE' : 'CONNECTING'}</span>
-          {hasRoom && <><span className="meta-divider" /><span>ROOM {state.roomCode}</span></>}
-        </div>
-      </header>
-
-      <div className="page-grid">
-        <aside className="side-rail">
-          <div className="rail-label">OPERATIONS LOG</div>
-          <div className="rail-status"><span className={`status-light ${state.connected ? 'is-live' : ''}`} />{state.connected ? 'SERVER READY' : 'LINK PENDING'}</div>
-          <div className="rail-rule" />
-          <p className="rail-copy">Two stations.<br />One sea.<br />No second chances.</p>
-          <div className="rail-coordinates" aria-hidden="true">
-            <span>10° 00' N</span><span>103° 50' E</span>
-          </div>
-        </aside>
-
-        <section className="workspace">
-          <svg className="chart-contours" viewBox="0 0 640 420" aria-hidden="true">
-            <path d="M652 13C560 6 586 71 492 72s-99-41-180-17-62 93-155 94-104-38-170-4" />
-            <path d="M651 38c-72-4-66 59-164 58s-105-38-174-15-66 92-158 93S40 139-8 165" />
-            <path d="M652 66c-66-1-67 54-163 55s-110-35-173-12-69 92-161 93-108-34-164-8" />
-            <path d="M653 97c-70 5-73 50-167 52s-105-31-169-8-73 91-165 91-108-29-160-1" />
-            <path d="M651 128c-76 8-83 47-171 49s-102-27-165-5-76 88-168 89S39 235-7 265" />
-          </svg>
-          {state.error && <div className="alert-bar" role="alert">{state.error}<button onClick={() => window.location.reload()}>RETRY LINK</button></div>}
-          {notice && <div className="toast" role="status">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss message">×</button></div>}
-
-          {!hasRoom && <Lobby busy={busy || !state.connected} onCreate={() => run(createRoom)} joinCode={joinCode} setJoinCode={setJoinCode} onJoin={() => run(() => joinRoom(joinCode), 'Room joined.')} />}
-          {hasRoom && state.phase === 'WaitingForOpponent' && <WaitingRoom code={state.roomCode} onCopy={() => navigator.clipboard?.writeText(state.roomCode)} onLeave={leaveRoom} />}
-          {hasRoom && state.phase === 'Placing' && <PlacementScreen fleet={fleet} selectedShip={selectedShip} setSelectedShip={setSelectedShip} fleetCells={fleetCells} onCell={handlePlacementCell} onRotate={() => updateFleet((current) => current.map((placement) => placement.type === selectedShip ? { ...placement, orientation: placement.orientation === 'Horizontal' ? 'Vertical' : 'Horizontal' } : placement))} onSubmit={handleSubmitFleet} submitted={state.fleetSubmitted} opponentReady={state.opponentFleetSubmitted} busy={busy} />}
-          {hasRoom && state.phase === 'Playing' && <BattleScreen state={state} ownShips={ownShips} shotMap={shotMap} incomingMap={allIncomingMap} onFire={(coordinate) => run(async () => { const result = await fire(coordinate); if (!result.accepted) throw new Error(statusText(result.status)) })} />}
-          {hasRoom && state.phase === 'Finished' && <GameOverScreen state={state} revealedCells={revealedCells} onRematch={() => run(rematch)} onLeave={leaveRoom} />}
-        </section>
-      </div>
-    </main>
-  )
+function cellsFor(placement: FleetPlacement): Coordinate[] {
+  return Array.from({ length: shipLength(placement.type) }, (_, offset) => ({
+    x: placement.start.x + (placement.orientation === 'Horizontal' ? offset : 0),
+    y: placement.start.y + (placement.orientation === 'Vertical' ? offset : 0),
+  }))
 }
-
-function Lobby({ busy, onCreate, joinCode, setJoinCode, onJoin }: { busy: boolean; onCreate: () => void; joinCode: string; setJoinCode: (value: string) => void; onJoin: () => void }) {
-  return <div className="lobby-view">
-    <div className="hero-copy">
-      <div className="section-index">CHART 01 / OPEN WATERS</div>
-      <h1>Plot your course.<br /><em>Sink their fleet.</em></h1>
-      <p className="hero-lede">A private two-player engagement on a 10 × 10 grid. Place five ships, take the first shot, and trust the current.</p>
-      <div className="hero-specs"><span><strong>10×10</strong> GRID</span><span><strong>05</strong> SHIPS</span><span><strong>01</strong> TARGET</span></div>
-    </div>
-    <div className="lobby-panel">
-      <div className="panel-head"><span>START A MISSION</span><span className="panel-code">N 01</span></div>
-      <button className="primary-action" onClick={onCreate} disabled={busy}><span>{busy ? 'CONNECTING…' : 'CREATE NEW ROOM'}</span><b>↗</b></button>
-      <div className="split-rule"><span>OR JOIN WITH A CODE</span></div>
-      <label className="field-label" htmlFor="room-code">ROOM CODE</label>
-      <div className="join-row"><input id="room-code" value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase().slice(0, 6))} placeholder="A7K9Q2" maxLength={6} onKeyDown={(event) => event.key === 'Enter' && onJoin()} /><button onClick={onJoin} disabled={busy || joinCode.length < 4}>JOIN</button></div>
-      <p className="form-note">No account. Share a code. Match history is not saved.</p>
-    </div>
-    <div className="tide-line"><span>EST. 2026</span><span>ANONYMOUS / SERVER AUTHORITATIVE</span><span>SCROLL TO NAVIGATE ↓</span></div>
-  </div>
+function fleetViews(fleet: FleetPlacement[]): ShipView[] {
+  return fleet.map((ship) => ({ type: ship.type, cells: cellsFor(ship), hits: [], isSunk: false }))
 }
-
-function WaitingRoom({ code, onCopy, onLeave }: { code: string; onCopy: () => void; onLeave: () => void }) {
-  return <div className="waiting-view">
-    <div className="section-index">CHART 02 / STANDBY</div>
-    <h1>Room secured.<br /><em>Bring a friend.</em></h1>
-    <p className="hero-lede">Your station is ready. Send this six-character code to the opposing captain.</p>
-    <button className="room-code" onClick={onCopy} aria-label="Copy room code"><span>{code}</span><small>COPY CODE ↗</small></button>
-    <div className="waiting-radar"><span className="radar-ring ring-one" /><span className="radar-ring ring-two" /><span className="radar-sweep" /><span className="radar-center" /></div>
-    <p className="waiting-note"><span className="pulse" /> LISTENING FOR OPPONENT</p>
-    <button className="text-action" onClick={onLeave}>← RETURN TO LOBBY</button>
-  </div>
-}
-
-function PlacementScreen({ fleet, selectedShip, setSelectedShip, fleetCells, onCell, onRotate, onSubmit, submitted, opponentReady, busy }: { fleet: FleetPlacement[]; selectedShip: ShipType; setSelectedShip: (ship: ShipType) => void; fleetCells: Map<string, ShipType>; onCell: (coordinate: Coordinate) => void; onRotate: () => void; onSubmit: () => void; submitted: boolean; opponentReady: boolean; busy: boolean }) {
-  const [hovered, setHovered] = useState<Coordinate | null>(null)
-  const invalidCells = getInvalidFleetCells(fleet)
-  const selected = fleet.find((placement) => placement.type === selectedShip)
-  const preview = hovered && selected ? new Set(cellsFor({ ...selected, start: hovered }).map(key)) : new Set<string>()
-  const previewInvalid = preview.size !== shipLength(selectedShip) || [...preview].some((cellKey) => invalidCells.has(cellKey) && fleetCells.get(cellKey) !== selectedShip)
-  return <div className="game-view placement-view">
-    <GameHeader index="03" title="Deploy your fleet" detail={opponentReady ? 'Opponent fleet locked' : 'Arrange five ships on your grid'} />
-    <div className="game-layout">
-      <div className="board-wrap"><div className="board-label"><span>YOUR WATERS</span><span>CLICK TO PLOT / R TO ROTATE</span></div><BoardGrid ariaLabel="Your fleet placement grid" cell={(coordinate) => {
-        const ship = fleetCells.get(key(coordinate))
-        const ghost = preview.has(key(coordinate))
-        const isInvalid = invalidCells.has(key(coordinate)) || (ghost && previewInvalid)
-        return <button className={`grid-cell ${ship ? `ship-cell ship-${ship.toLowerCase()}` : ''} ${ghost ? 'ghost-cell' : ''} ${isInvalid ? 'invalid-cell' : ''}`} disabled={submitted} onMouseEnter={() => setHovered(coordinate)} onFocus={() => setHovered(coordinate)} onMouseLeave={() => setHovered(null)} onBlur={() => setHovered(null)} onContextMenu={(event) => { event.preventDefault(); onRotate() }} onClick={() => onCell(coordinate)} aria-label={`${letters[coordinate.x]}${coordinate.y + 1}${ship ? ` ${ship}` : ''}${isInvalid ? ' invalid' : ''}`}>{ship && <span>{fleetSpecs.find((spec) => spec.type === ship)?.mark}</span>}</button>
-      }} /></div>
-      <aside className="fleet-panel"><div className="panel-head"><span>FLEET REGISTER</span><span className="panel-code">05 / 05</span></div><div className="fleet-list">{fleetSpecs.map((spec) => { const placement = fleet.find((item) => item.type === spec.type)!; return <button key={spec.type} className={`fleet-row ${selectedShip === spec.type ? 'is-selected' : ''}`} onClick={() => setSelectedShip(spec.type)} disabled={submitted}><span className="fleet-mark">{spec.mark}</span><span className="fleet-name">{spec.type}<small>{spec.length} CELLS / {placement.orientation === 'Horizontal' ? 'HORIZONTAL' : 'VERTICAL'}</small></span><span className="fleet-state">{submitted ? 'LOCKED' : 'READY'}</span></button> })}</div><div className="placement-actions"><button className="secondary-action" onClick={onRotate} disabled={submitted}>ROTATE SELECTED <b>R</b></button><button className="primary-action" onClick={onSubmit} disabled={submitted || busy || invalidCells.size > 0}><span>{submitted ? 'FLEET LOCKED' : busy ? 'LOCKING FLEET…' : 'LOCK FLEET'}</span><b>↗</b></button></div><p className="form-note">Ships may touch. They may not overlap or leave the chart.{invalidCells.size > 0 && !submitted && <strong className="fleet-error"> Move the marked ship to clear the chart.</strong>}</p>{opponentReady && <p className="ready-note">OPPONENT FLEET LOCKED / YOURS IS NEXT</p>}</aside>
-    </div>
-  </div>
-}
-
-function BattleScreen({ state, ownShips, shotMap, incomingMap, onFire }: { state: ReturnType<typeof useGameHub>['state']; ownShips: { type: ShipType; cells: Coordinate[]; hits: Coordinate[]; isSunk: boolean }[]; shotMap: Map<string, { status: GameShotStatus; sunkShip?: ShipType }>; incomingMap: Map<string, { status: GameShotStatus; sunkShip?: ShipType }>; onFire: (coordinate: Coordinate) => void }) {
-  const ownShipCells = new Map(ownShips.flatMap((ship) => ship.cells.map((cell) => [key(cell), ship])))
-  return <div className="game-view battle-view"><GameHeader index="04" title="Engage the enemy" detail={state.isYourTurn ? 'Your firing order' : 'Awaiting return fire'} /><div className={`turn-banner ${state.isYourTurn ? 'your-turn' : ''}`}><span className="pulse" />{state.isYourTurn ? 'YOUR TURN — SELECT A TARGET' : 'OPPONENT TURN — HOLD POSITION'}<strong>{state.roomCode}</strong></div><div className="battle-layout"><div className="board-wrap"><div className="board-label"><span>ENEMY WATERS</span><span>UNKNOWN CONTACTS</span></div><BoardGrid ariaLabel="Enemy target grid" cell={(coordinate) => { const shot = shotMap.get(key(coordinate)); const revealed = false; return <button className={`grid-cell target-cell ${shot ? `shot-${shot.status.toLowerCase()}` : ''}`} disabled={!state.isYourTurn || Boolean(shot)} onClick={() => onFire(coordinate)} aria-label={`${letters[coordinate.x]}${coordinate.y + 1}${shot ? ` ${shot.status}` : ' fire'}`}>{shot && <span>{shot.status === 'Miss' ? '·' : shot.status === 'Sunk' || shot.status === 'Won' ? '×' : '•'}</span>}{revealed && '•'}</button> }} /></div><div className="board-wrap"><div className="board-label"><span>YOUR WATERS</span><span>INCOMING FIRE</span></div><BoardGrid ariaLabel="Your fleet grid" cell={(coordinate) => { const ship = ownShipCells.get(key(coordinate)); const shot = incomingMap.get(key(coordinate)); return <div className={`grid-cell own-cell ${ship ? `ship-cell ship-${ship.type.toLowerCase()}` : ''} ${shot ? `incoming-${shot.status.toLowerCase()}` : ''}`} aria-label={`${letters[coordinate.x]}${coordinate.y + 1}${shot ? ` ${shot.status}` : ''}`}>{shot && <span>{shot.status === 'Miss' ? '·' : '×'}</span>}{ship && !shot && <span>{fleetSpecs.find((spec) => spec.type === ship.type)?.mark}</span>}</div> }} /></div></div><div className="battle-footer"><span>{state.message}</span><span>{state.shots.length.toString().padStart(2, '0')} SHOTS FIRED / {state.incomingShots.length.toString().padStart(2, '0')} RECEIVED</span></div></div>
-}
-
-function GameOverScreen({ state, revealedCells, onRematch, onLeave }: { state: ReturnType<typeof useGameHub>['state']; revealedCells: Map<string, { type: ShipType }>; onRematch: () => void; onLeave: () => void }) {
-  const won = state.gameOver?.winner === state.player
-  return <div className="game-view game-over-view"><div className="victory-stamp" aria-hidden="true">{won ? 'WIN' : 'LOST'}</div><div className="section-index">CHART 05 / FINAL REPORT</div><h1>{won ? <>Mission<br /><em>complete.</em></> : <>Fleet<br /><em>lost.</em></>}</h1><p className="hero-lede">{won ? 'Every opposing vessel has been sent below the surface.' : 'Your station has been overcome. Study the chart and return to the sea.'}</p><div className="final-report"><span>WINNER</span><strong>{state.gameOver?.winner === 'One' ? 'STATION ONE' : 'STATION TWO'}</strong><span>ROOM</span><strong>{state.roomCode}</strong></div><div className="game-over-actions"><button className="primary-action" onClick={onRematch}><span>REQUEST REMATCH</span><b>↗</b></button><button className="secondary-action" onClick={onLeave}>RETURN TO LOBBY</button></div><div className="mini-chart"><BoardGrid ariaLabel="Final opposing fleet chart" cell={(coordinate) => { const ship = revealedCells.get(key(coordinate)); return <div className={`grid-cell own-cell ${ship ? `ship-cell ship-${ship.type.toLowerCase()}` : ''}`}><span>{ship ? fleetSpecs.find((spec) => spec.type === ship.type)?.mark : ''}</span></div> }} /></div></div>
-}
-
-function GameHeader({ index, title, detail }: { index: string; title: string; detail: string }) { return <div className="game-header"><div><div className="section-index">CHART {index} / ACTIVE MISSION</div><h1>{title}</h1></div><p>{detail}</p></div> }
-
-function BoardGrid({ cell, ariaLabel }: { cell: (coordinate: Coordinate) => ReactNode; ariaLabel: string }) { return <div className="board" role="grid" aria-label={ariaLabel}><div className="board-corner">N</div>{letters.map((letter) => <span className="axis axis-top" key={letter}>{letter}</span>)}{Array.from({ length: 10 }, (_, y) => <Fragment key={`row-${y}`}><span className="axis axis-left">{String(y + 1).padStart(2, '0')}</span>{Array.from({ length: 10 }, (_, x) => <div className="cell-slot" key={`${x}-${y}`} role="gridcell">{cell({ x, y })}</div>)}</Fragment>)}</div> }
-
-function buildFleetCells(fleet: FleetPlacement[]) { const cells = new Map<string, ShipType>(); fleet.forEach((placement) => { for (let offset = 0; offset < shipLength(placement.type); offset += 1) { const coordinate = placement.orientation === 'Horizontal' ? { x: placement.start.x + offset, y: placement.start.y } : { x: placement.start.x, y: placement.start.y + offset }; if (coordinate.x >= 0 && coordinate.x < 10 && coordinate.y >= 0 && coordinate.y < 10) cells.set(key(coordinate), placement.type) } }); return cells }
-function cellsFor(placement: FleetPlacement) { return Array.from({ length: shipLength(placement.type) }, (_, offset) => placement.orientation === 'Horizontal' ? { x: placement.start.x + offset, y: placement.start.y } : { x: placement.start.x, y: placement.start.y + offset }) }
-function getInvalidFleetCells(fleet: FleetPlacement[]) {
-  const occupied = new Map<string, ShipType>()
-  const invalid = new Set<string>()
-  for (const placement of fleet) {
-    for (const cell of cellsFor(placement)) {
-      if (cell.x < 0 || cell.x > 9 || cell.y < 0 || cell.y > 9) {
-        invalid.add(key({ x: Math.max(0, Math.min(9, cell.x)), y: Math.max(0, Math.min(9, cell.y)) }))
-        continue
-      }
-      const cellKey = key(cell)
-      const otherShip = occupied.get(cellKey)
-      if (otherShip) invalid.add(cellKey)
-      else occupied.set(cellKey, placement.type)
-    }
+function invalidCells(fleet: FleetPlacement[]) {
+  const occupied = new Set<string>(), invalid = new Set<string>()
+  for (const ship of fleet) for (const cell of cellsFor(ship)) {
+    if (cell.x < 0 || cell.y < 0 || cell.x > 9 || cell.y > 9) {
+      invalid.add(cellKey({ x: Math.max(0, Math.min(9, cell.x)), y: Math.max(0, Math.min(9, cell.y)) }))
+    } else if (occupied.has(cellKey(cell))) invalid.add(cellKey(cell))
+    else occupied.add(cellKey(cell))
   }
   return invalid
 }
-function key(coordinate: Coordinate) { return `${coordinate.x},${coordinate.y}` }
-function statusText(status: GameShotStatus) { return ({ NotYourTurn: 'It is not your turn.', GameNotReady: 'The game is not ready.', AlreadyFired: 'You already fired at that coordinate.', OutOfBounds: 'That coordinate is outside the chart.', GameFinished: 'The mission has ended.' } as Record<string, string>)[status] ?? 'The shot was rejected.' }
+function randomFleet(): FleetPlacement[] {
+  const occupied = new Set<string>()
+  return fleetSpecs.map((spec) => {
+    const options: FleetPlacement[] = []
+    for (const orientation of ['Horizontal', 'Vertical'] as const)
+      for (let y = 0; y < 10; y++) for (let x = 0; x < 10; x++) {
+        const ship = { type: spec.type, start: { x, y }, orientation }
+        if (cellsFor(ship).every((cell) => cell.x < 10 && cell.y < 10 && !occupied.has(cellKey(cell)))) options.push(ship)
+      }
+    const chosen = options[Math.floor(Math.random() * options.length)]
+    cellsFor(chosen).forEach((cell) => occupied.add(cellKey(cell)))
+    return chosen
+  })
+}
+function savedFleet(key: string): FleetPlacement[] | undefined {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(key) ?? 'null')
+    if (!Array.isArray(value) || value.length !== 5) return undefined
+    if (!fleetSpecs.every((spec) => value.filter((s) => s?.type === spec.type && s.start
+      && Number.isInteger(s.start.x) && Number.isInteger(s.start.y)
+      && ['Horizontal', 'Vertical'].includes(s.orientation)).length === 1)) return undefined
+    return value as FleetPlacement[]
+  } catch { return undefined }
+}
 
+function App() {
+  const { state, createRoom, createBotRoom, joinRoom, submitFleet, fire, rematch, leaveRoom } = useGameHub()
+  const [joinCode, setJoinCode] = useState('')
+  const [fleets, setFleets] = useState<Record<string, FleetPlacement[]>>({})
+  const [selectedShip, setSelectedShip] = useState<ShipType>('Carrier')
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
+  const fleetKey = state.roomCode && state.player ? `battleship-fleet:${state.roomCode}:${state.player}` : ''
+  const stored = useMemo(() => savedFleet(fleetKey), [fleetKey])
+  const fleet = fleets[fleetKey] ?? stored ?? makeDefaultFleet()
+  const updateFleet = useCallback((change: (value: FleetPlacement[]) => FleetPlacement[]) => {
+    if (!fleetKey) return
+    setFleets((current) => ({ ...current, [fleetKey]: change(current[fleetKey] ?? stored ?? makeDefaultFleet()) }))
+  }, [fleetKey, stored])
+  const rotate = useCallback(() => updateFleet((current) => current.map((ship) => ship.type === selectedShip
+    ? { ...ship, orientation: ship.orientation === 'Horizontal' ? 'Vertical' : 'Horizontal' } : ship)), [selectedShip, updateFleet])
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === 'r' && state.phase === 'Placing' && !state.fleetSubmitted
+        && !(event.target instanceof HTMLInputElement)) { event.preventDefault(); rotate() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [rotate, state.phase, state.fleetSubmitted])
+  useEffect(() => {
+    if (fleetKey && state.phase === 'Placing' && !state.fleetSubmitted) localStorage.setItem(fleetKey, JSON.stringify(fleet))
+  }, [fleetKey, fleet, state.phase, state.fleetSubmitted])
+
+  const run = async (action: () => Promise<unknown>, success?: string) => {
+    if (busy) return
+    setBusy(true); setNotice('')
+    try { await action(); if (success) setNotice(success) }
+    catch (error) { setNotice(error instanceof Error ? error.message : 'Không thể thực hiện. Hãy thử lại.') }
+    finally { setBusy(false) }
+  }
+  const hasRoom = Boolean(state.roomCode)
+  return <main className={`app-shell ${hasRoom ? 'in-game' : ''}`}>
+    <header className="topbar">
+      <div className="brand"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>BATTLESHIP <small>/ HẢI CHIẾN</small></span></div>
+      <div className="topbar-meta"><span className={`connection-dot ${state.connected ? 'is-live' : ''}`} />
+        <span>{state.connected ? 'ĐÃ KẾT NỐI' : 'ĐANG KẾT NỐI'}</span>
+        {hasRoom && <><span className="meta-divider" /><span>{state.isBot ? 'ĐẤU VỚI MÁY' : `PHÒNG ${state.roomCode}`}</span>
+          <button className="leave-button" onClick={() => { if (window.confirm('Rời trận đấu và trở về sảnh?')) leaveRoom() }}>Rời trận</button></>}
+      </div>
+    </header>
+    <div className="page-grid">
+      <aside className="side-rail"><p className="rail-copy">Hai hạm đội.<br />Một đại dương.</p><div className="rail-rule" /><p className="form-note">Giấu đội tàu.<br />Chọn tọa độ.<br />Đánh chìm đối thủ.</p></aside>
+      <section className="workspace">
+        {state.error && <div className="alert-bar" role="alert">{state.error}<button onClick={() => window.location.reload()}>Kết nối lại</button></div>}
+        {notice && <div className="toast" role="status">{notice}<button onClick={() => setNotice('')} aria-label="Đóng thông báo">×</button></div>}
+        {!hasRoom && <Lobby connected={state.connected} busy={busy} joinCode={joinCode} setJoinCode={setJoinCode}
+          onCreate={() => run(createRoom)} onBot={() => run(createBotRoom)} onJoin={() => run(() => joinRoom(joinCode))} />}
+        {hasRoom && state.phase === 'WaitingForOpponent' && <div className="waiting-view">
+          <h1>Phòng đã sẵn sàng.<br /><em>Mời bạn cùng chơi.</em></h1>
+          <p className="hero-lede">Gửi mã sáu ký tự này cho bạn bè. Đối thủ vào phòng là có thể bắt đầu xếp tàu.</p>
+          <button className="room-code" onClick={() => run(async () => { if (!navigator.clipboard) throw new Error('Hãy chọn và sao chép mã phòng bên dưới.'); await navigator.clipboard.writeText(state.roomCode) }, 'Đã sao chép mã phòng.')}><span>{state.roomCode}</span><small>Sao chép mã</small></button>
+          <p className="waiting-note" role="status">Đang chờ đối thủ vào phòng…</p>
+          <button className="text-action" onClick={leaveRoom}>Trở về sảnh</button>
+        </div>}
+        {hasRoom && state.phase === 'Placing' && <PlacementScreen fleet={fleet} selected={selectedShip} onSelect={setSelectedShip}
+          onPlace={(cell) => updateFleet((current) => current.map((ship) => ship.type === selectedShip ? { ...ship, start: cell } : ship))}
+          onRotate={rotate} onRandom={() => updateFleet(randomFleet)} onSubmit={() => run(() => submitFleet(fleet))}
+          submitted={state.fleetSubmitted} opponentReady={state.opponentFleetSubmitted} busy={busy || !state.connected} />}
+        {hasRoom && state.phase === 'Playing' && <BattleScreen state={state} busy={busy} onFire={(cell) => run(async () => {
+          const result = await fire(cell); if (!result.accepted) throw new Error(shotNames[result.status])
+        })} />}
+        {hasRoom && state.phase === 'Finished' && <GameOverScreen state={state} busy={busy || !state.connected} onRematch={() => run(rematch)} onLeave={leaveRoom} />}
+      </section>
+    </div>
+  </main>
+}
+
+function Lobby({ connected, busy, joinCode, setJoinCode, onCreate, onBot, onJoin }: {
+  connected: boolean; busy: boolean; joinCode: string; setJoinCode: (code: string) => void
+  onCreate: () => void; onBot: () => void; onJoin: () => void
+}) {
+  const disabled = busy || !connected
+  return <div className="lobby-view"><div className="hero-copy">
+    <h1>Bố trí hạm đội.<br /><em>Làm chủ đại dương.</em></h1>
+    <p className="hero-lede">Năm con tàu, một bản đồ 10 × 10. Giấu đội tàu của bạn và lần lượt bắn để tìm đối thủ. Ai đánh chìm toàn bộ tàu trước sẽ thắng.</p>
+    <p className="lobby-rules">Chơi cùng bạn bè bằng mã phòng, hoặc luyện tập với máy ngay.</p>
+  </div><div className="lobby-panel">
+    <h2>Bắt đầu hải chiến</h2>
+    <button className="primary-action" onClick={onCreate} disabled={disabled}>Tạo phòng chơi cùng bạn bè</button>
+    <button className="secondary-action bot-action" onClick={onBot} disabled={disabled}>Chơi với máy <span>Ngẫu nhiên</span></button>
+    <p className="form-note">Máy tự xếp đủ năm tàu và bắn ngẫu nhiên, không lặp ô.</p>
+    <div className="split-rule"><span>ĐÃ CÓ MÃ PHÒNG?</span></div>
+    <label className="field-label" htmlFor="room-code">Mã phòng của bạn bè</label>
+    <form className="join-row" onSubmit={(event) => { event.preventDefault(); if (!disabled && joinCode.length === 6) onJoin() }}>
+      <input id="room-code" autoComplete="off" value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))} placeholder="A7K9Q2" maxLength={6} />
+      <button disabled={disabled || joinCode.length !== 6}>Vào phòng</button>
+    </form><p className="form-note">Không cần tài khoản. Trận đấu có thể khôi phục khi tải lại trang.</p>
+    {!connected && <p role="status" className="ready-note">Đang kết nối máy chủ…</p>}
+  </div></div>
+}
+
+function PlacementScreen({ fleet, selected, onSelect, onPlace, onRotate, onRandom, onSubmit, submitted, opponentReady, busy }: {
+  fleet: FleetPlacement[]; selected: ShipType; onSelect: (type: ShipType) => void; onPlace: (cell: Coordinate) => void
+  onRotate: () => void; onRandom: () => void; onSubmit: () => void; submitted: boolean; opponentReady: boolean; busy: boolean
+}) {
+  const [hovered, setHovered] = useState<Coordinate | null>(null)
+  const invalid = invalidCells(fleet)
+  const proposed = fleet.map((ship) => ship.type === selected && hovered ? { ...ship, start: hovered } : ship)
+  const previewCells = new Set(hovered ? cellsFor(proposed.find((ship) => ship.type === selected)!).map(cellKey) : [])
+  const invalidPreview = hovered && invalidCells(proposed).size > 0
+  const views = fleetViews(fleet)
+  return <div className="game-view placement-view">
+    <GameHeader title="Bố trí đội tàu" detail={submitted ? 'Đã khóa tàu · đang chờ đối thủ' : 'Chọn tàu, chọn ô để đặt. Nhấn R để xoay.'} />
+    <div className="game-layout"><div className="board-wrap"><div className="board-label"><span>Vùng biển của bạn</span><span>Đầu tàu hướng sang phải hoặc xuống dưới</span></div>
+      <BoardGrid ariaLabel="Bản đồ bố trí đội tàu" ships={views} cell={(cell) => {
+        const ship = views.find((ship) => ship.cells.some((part) => cellKey(part) === cellKey(cell)))
+        return <button className={`grid-cell placement-cell ${ship ? 'has-ship' : ''} ${previewCells.has(cellKey(cell)) && !submitted ? `ghost-cell ${invalidPreview ? 'invalid-cell' : ''}` : ''} ${invalid.has(cellKey(cell)) ? 'invalid-cell' : ''}`}
+          disabled={submitted || busy} onClick={() => onPlace(cell)} onMouseEnter={() => setHovered(cell)} onMouseLeave={() => setHovered(null)} onFocus={() => setHovered(cell)} onBlur={() => setHovered(null)}
+          onContextMenu={(event) => { event.preventDefault(); if (!submitted && !busy) onRotate() }}
+          aria-label={`${cellName(cell)}${ship ? `, ${shipNames[ship.type]}` : ', biển trống'}${invalid.has(cellKey(cell)) ? ', vị trí không hợp lệ' : ''}`} />
+      }} />
+      <p className="form-note">Hình tàu cho biết hướng và chiều dài. Bạn có thể đặt tàu sát nhau, nhưng không được chồng lấn hoặc ra ngoài bản đồ.</p>
+    </div><aside className="fleet-panel"><h2>Đội tàu của bạn</h2><div className="fleet-list">
+      {fleetSpecs.map((spec) => <button key={spec.type} className={`fleet-row ${selected === spec.type ? 'is-selected' : ''}`} aria-pressed={selected === spec.type} onClick={() => onSelect(spec.type)} disabled={submitted || busy}>
+        <span className="fleet-ship-preview"><ShipDrawing length={spec.length} /></span>
+        <span className="fleet-name">{shipNames[spec.type]}<small>{spec.length} ô · {fleet.find((s) => s.type === spec.type)?.orientation === 'Horizontal' ? 'Nằm ngang' : 'Nằm dọc'}</small></span>
+        <span className="fleet-state">{submitted ? 'Đã khóa' : selected === spec.type ? 'Đang chọn' : ''}</span>
+      </button>)}
+    </div><div className="placement-actions">
+      <button className="secondary-action" onClick={onRotate} disabled={submitted || busy}>Xoay tàu đang chọn <kbd>R</kbd></button>
+      <button className="secondary-action" onClick={onRandom} disabled={submitted || busy}>Xếp ngẫu nhiên</button>
+      <button className="primary-action" onClick={onSubmit} disabled={submitted || busy || invalid.size > 0}>{submitted ? 'Đã khóa đội tàu' : busy ? 'Đang khóa…' : 'Khóa đội tàu · Sẵn sàng'}</button>
+    </div>
+    {invalid.size > 0 && !submitted && <p className="fleet-error" role="alert">Tàu chồng lấn hoặc vượt bản đồ. Di chuyển tàu khỏi ô đánh dấu đỏ.</p>}
+    {opponentReady && <p className="ready-note">Đối thủ đã sẵn sàng.</p>}
+    </aside></div>
+  </div>
+}
+
+function Legend() {
+  return <ul className="shot-legend" aria-label="Chú thích bản đồ">
+    <li><i className="legend-unfired" />Chưa bắn</li><li><i className="legend-miss"><ShotMark status="Miss" /></i>Trượt</li>
+    <li><i className="legend-hit"><ShotMark status="Hit" /></i>Trúng tàu</li><li><i className="legend-sunk"><ShotMark status="Sunk" /></i>Chìm tàu</li>
+  </ul>
+}
+
+function BattleScreen({ state, busy, onFire }: { state: HubState; busy: boolean; onFire: (cell: Coordinate) => void }) {
+  const [focus, setFocus] = useState<'enemy' | 'own'>(state.isYourTurn ? 'enemy' : 'own')
+  const [autoSwitch, setAutoSwitch] = useState(true)
+  useEffect(() => {
+    if (!autoSwitch) return
+    // Keep the latest hit visible before switching boards. Both boards stay mounted.
+    const timer = window.setTimeout(() => setFocus(state.isYourTurn ? 'enemy' : 'own'), state.isYourTurn ? 1200 : 650)
+    return () => window.clearTimeout(timer)
+  }, [state.isYourTurn, state.incomingShots.length, autoSwitch])
+  const ownShips = state.ownBoard?.ships ?? []
+  const ownCells = new Map(ownShips.flatMap((ship) => ship.cells.map((cell) => [cellKey(cell), ship])))
+  const shots = new Map(state.shots.map((shot) => [cellKey(shot.coordinate), shot]))
+  const incoming = new Map(state.incomingShots.map((shot) => [cellKey(shot.coordinate), shot]))
+  const latestOutgoing = state.shots.at(-1), latestIncoming = state.incomingShots.at(-1)
+  const chooseFocus = (value: 'enemy' | 'own') => { setFocus(value); setAutoSwitch(false) }
+  const readyToFire = state.isYourTurn && state.connected && !busy
+  const shotCell = (cell: Coordinate, shot: ShotHistoryItem | undefined, own: boolean) => {
+    const ship = own ? ownCells.get(cellKey(cell)) : undefined
+    const sunk = own && ship?.isSunk && shot?.status !== 'Miss'
+    const status = sunk ? 'Sunk' : shot?.status
+    const last = own ? latestIncoming : latestOutgoing
+    const recent = Boolean(last && cellKey(last.coordinate) === cellKey(cell))
+    const label = `${cellName(cell)}, ${shot ? shotNames[status!] : 'chưa bắn'}${ship ? `, ${shipNames[ship.type]}` : ''}`
+    const content = <>{status && <ShotMark status={status} />}{recent && <span className="latest-shot" aria-hidden="true" />}</>
+    const className = `grid-cell ${own ? 'own-cell' : 'target-cell'} ${ship ? 'has-ship' : ''} ${status ? `shot-${status.toLowerCase()}` : 'unfired'} ${recent ? 'is-latest' : ''}`
+    return own ? <div className={className} aria-label={label} title={label}>{content}</div>
+      : <button className={className} disabled={!readyToFire || Boolean(shot)} onClick={() => onFire(cell)} aria-label={`${label}${!shot ? ', bắn tại đây' : ''}`} title={label}>{content}</button>
+  }
+  return <div className="game-view battle-view">
+    <GameHeader title={state.isYourTurn ? 'Đến lượt bạn bắn' : state.isBot ? 'Máy đang ngắm bắn' : 'Đối thủ đang ngắm bắn'} detail={state.isYourTurn ? 'Chọn một ô chưa bắn trên biển đối thủ.' : 'Theo dõi vị trí và tình trạng đội tàu của bạn.'} />
+    <div className={`turn-banner ${state.isYourTurn ? 'your-turn' : ''}`} role="status" aria-live="polite">
+      <strong>{!state.connected ? 'Mất kết nối · Đang thử kết nối lại' : state.isYourTurn ? 'Lượt của bạn' : state.isBot ? 'Lượt của máy' : 'Lượt đối thủ'}</strong><span>{state.message}</span>
+    </div>
+    <div className="battle-toolbar"><div className="board-tabs" role="group" aria-label="Chọn bản đồ chính">
+      <button aria-pressed={focus === 'enemy'} onClick={() => chooseFocus('enemy')}>Ngắm bắn đối thủ</button>
+      <button aria-pressed={focus === 'own'} onClick={() => chooseFocus('own')}>Đội tàu của tôi</button>
+    </div><label className="auto-switch"><input type="checkbox" checked={autoSwitch} onChange={(e) => setAutoSwitch(e.target.checked)} />Tự đổi theo lượt</label></div>
+    <Legend />
+    <div className={`battle-layout focus-${focus}`}>
+      <section className={`board-wrap enemy-board ${focus === 'enemy' ? 'board-primary' : 'board-secondary'}`} aria-label="Vùng biển đối thủ">
+        <div className="board-label"><h2>Vùng biển đối thủ</h2><span>{state.shots.length} phát đã bắn</span></div>
+        <BoardGrid ariaLabel="Bản đồ ngắm bắn đối thủ" cell={(cell) => shotCell(cell, shots.get(cellKey(cell)), false)} />
+        <p className="board-hint">{latestOutgoing ? `Phát bắn của bạn: ${cellName(latestOutgoing.coordinate)} · ${shotNames[latestOutgoing.status]}` : 'Chọn tọa độ để tìm đội tàu đang ẩn của đối thủ.'}</p>
+        {focus !== 'enemy' && <button className="text-action expand-board" onClick={() => chooseFocus('enemy')}>Phóng lớn bản đồ bắn</button>}
+      </section>
+      <section className={`board-wrap own-board ${focus === 'own' ? 'board-primary' : 'board-secondary'}`} aria-label="Đội tàu của bạn">
+        <div className="board-label"><h2>Đội tàu của bạn</h2><span>{ownShips.filter((ship) => !ship.isSunk).length}/5 tàu còn nổi</span></div>
+        <BoardGrid ariaLabel="Bản đồ đội tàu của bạn" ships={ownShips} cell={(cell) => shotCell(cell, incoming.get(cellKey(cell)), true)} />
+        <p className="board-hint">{latestIncoming ? `Đối thủ bắn: ${cellName(latestIncoming.coordinate)} · ${shotNames[latestIncoming.status]}` : 'Tàu của bạn luôn hiện tại đây, kể cả sau khi tải lại trang.'}</p>
+        {focus !== 'own' && <button className="text-action expand-board" onClick={() => chooseFocus('own')}>Phóng lớn đội tàu của tôi</button>}
+      </section>
+    </div>
+    <p className="battle-footer">{!state.opponentConnected && !state.isBot ? 'Đối thủ mất kết nối. Đang chờ kết nối lại…' : 'Mỗi lượt bắn một ô. Bắn trúng vẫn chuyển lượt.'}</p>
+  </div>
+}
+
+function GameOverScreen({ state, busy, onRematch, onLeave }: { state: HubState; busy: boolean; onRematch: () => void; onLeave: () => void }) {
+  const won = state.gameOver?.winner === state.player
+  const opponent = state.gameOver?.opponentFleet ?? []
+  return <div className="game-view game-over-view">
+    <h1>{won ? 'Bạn đã chiến thắng!' : 'Hạm đội đã thất thủ.'}</h1>
+    <p className="hero-lede">{won ? 'Bạn đã đánh chìm toàn bộ năm tàu đối thủ. Đại dương thuộc về bạn!' : 'Đối thủ đã đánh chìm toàn bộ tàu của bạn. Thử lại với một cách bố trí khác nhé.'}</p>
+    <p className="result-summary">{state.shots.length} phát bắn · {state.isBot ? 'Đấu với máy' : `Phòng ${state.roomCode}`}</p>
+    <div className="game-over-actions"><button className="primary-action" disabled={busy} onClick={onRematch}>{busy ? 'Đang chuẩn bị…' : state.isBot ? 'Chơi lại với máy' : 'Yêu cầu chơi lại'}</button><button className="secondary-action" onClick={onLeave}>Trở về sảnh</button></div>
+    <p className="board-hint" role="status">{state.message}</p>
+    <div className="final-boards"><div><h2>Đội tàu đối thủ được tiết lộ</h2><BoardGrid ariaLabel="Vị trí đội tàu đối thủ sau trận đấu" ships={opponent} cell={(cell) => {
+      const hit = opponent.some((ship) => ship.hits.some((part) => cellKey(part) === cellKey(cell)))
+      return <div className={`grid-cell own-cell ${hit ? 'shot-hit' : ''}`}>{hit && <ShotMark status="Hit" />}</div>
+    }} /></div><div><h2>Đội tàu của bạn</h2><BoardGrid ariaLabel="Đội tàu của bạn sau trận đấu" ships={state.ownBoard?.ships} cell={(cell) => {
+      const shot = state.incomingShots.find((s) => cellKey(s.coordinate) === cellKey(cell))
+      return <div className={`grid-cell own-cell ${shot ? `shot-${shot.status.toLowerCase()}` : ''}`}>{shot && <ShotMark status={shot.status} />}</div>
+    }} /></div></div>
+  </div>
+}
+
+function GameHeader({ title, detail }: { title: string; detail: string }) {
+  return <div className="game-header"><h1>{title}</h1><p>{detail}</p></div>
+}
 export default App

@@ -17,7 +17,8 @@ public sealed record JoinRoomResponse(
     BoardView OwnBoard,
     IReadOnlyList<ShotHistoryItem> ShotsAgainstOpponent,
     IReadOnlyList<ShotHistoryItem> ShotsAgainstYou,
-    GameOverMessage? Result = null);
+    GameOverMessage? Result = null,
+    bool IsBot = false);
 
 public sealed record FleetPlacementDto(ShipType Type, Coordinate Start, Orientation Orientation);
 
@@ -25,7 +26,8 @@ public sealed record SubmitFleetResponse(
     bool Accepted,
     GamePhase Phase,
     string? Error = null,
-    IReadOnlyList<FleetValidationError>? Errors = null);
+    IReadOnlyList<FleetValidationError>? Errors = null,
+    BoardView? OwnBoard = null);
 
 public sealed record FireResponse(
     bool Accepted,

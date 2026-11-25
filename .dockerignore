@@ -1,6 +1,7 @@
 .git
 .vs
 .npm-cache
+artifacts/
 **/bin/
 **/obj/
 client/node_modules/

@@ -14,6 +14,8 @@ ASP.NET Core .NET 8 with SignalR, React with TypeScript and Vite; delegated from
 
 Two people who want to play Battleship online together without creating accounts. One person creates a room and shares its code; the other joins with that code.
 
+Players can also practice alone against a server-controlled random opponent. The interface is in Vietnamese.
+
 ## Product Purpose
 
 Let two players play the original Battleship game online. Success means they can place fleets, take alternating shots, and finish a complete match over a live connection.
@@ -36,6 +38,9 @@ Players use separate browser sessions and may reconnect after a refresh or netwo
 - The server owns game state and validates actions. An opponent's ship locations remain private until the match ends.
 - Current room storage is in memory; no database or login is planned.
 - A player token stored in local storage supports reconnecting to the same seat.
+- A computer opponent places a legal random fleet and fires uniformly at untried cells, without inspecting the human fleet to choose targets.
+- Battles emphasize the enemy board on the player's turn and the visible own fleet on the opponent's turn. Players can switch boards manually or disable automatic switching.
+- Ships are drawn as continuous silhouettes across occupied cells. Misses, hits, and sunk ships use distinct colors and symbols with a visible legend.
 
 ## Evidence on Hand
 

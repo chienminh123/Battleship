@@ -13,7 +13,7 @@ public sealed class RoomCreationRateLimitFilter : IHubFilter
         HubInvocationContext invocationContext,
         Func<HubInvocationContext, ValueTask<object?>> next)
     {
-        if (string.Equals(invocationContext.HubMethodName, "CreateRoom", StringComparison.Ordinal))
+        if (invocationContext.HubMethodName is "CreateRoom" or "CreateBotRoom")
         {
             var clientId = invocationContext.Context.GetHttpContext()?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             if (!_clients.GetOrAdd(clientId, _ => new ClientBucket()).TryAcquire(DateTime.UtcNow))

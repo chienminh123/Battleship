@@ -48,6 +48,14 @@ public sealed class GameHub(IRoomStore rooms, ILogger<GameHub> logger) : Hub
         return BuildJoinResponse(room, player, token);
     }
 
+    public async Task<JoinRoomResponse> CreateBotRoom()
+    {
+        var created = await CreateRoom();
+        var (room, player) = ResolveSession();
+        lock (room.SyncRoot) room.AddBot();
+        return BuildJoinResponse(room, player, created.PlayerToken);
+    }
+
     public async Task<SubmitFleetResponse> SubmitFleet(IReadOnlyCollection<FleetPlacementDto?>? placements)
     {
         var (room, player) = ResolveSession();
@@ -90,7 +98,8 @@ public sealed class GameHub(IRoomStore rooms, ILogger<GameHub> logger) : Hub
                 await Clients.Client(otherConnection).SendAsync("GameStarted", new GameStartedMessage(false));
         }
 
-        return new SubmitFleetResponse(true, result.Phase);
+        lock (room.SyncRoot)
+            return new SubmitFleetResponse(true, result.Phase, OwnBoard: room.Game.GetOwnBoard(player));
     }
 
     public async Task<FireResponse> Fire(int x, int y)
@@ -130,6 +139,33 @@ public sealed class GameHub(IRoomStore rooms, ILogger<GameHub> logger) : Hub
             if (opponentConnection is not null)
             {
                 await Clients.Client(opponentConnection).SendAsync("GameOver", new GameOverMessage(player, otherOpponentFleet));
+            }
+        }
+
+        if (room.HasBot && result.Status != GameShotStatus.Won)
+        {
+            // Give the player time to see their own fleet before the return shot.
+            // Do not hold the room lock while waiting; reconnects remain possible.
+            await Task.Delay(1600);
+            GameShotResult botShot;
+            string? humanConnection;
+            IReadOnlyList<ShipView>? revealedFleet = null;
+            lock (room.SyncRoot)
+            {
+                if (room.Game.Phase != GamePhase.Playing || room.Game.CurrentPlayer != PlayerId.Two)
+                    return ToFireResponse(result);
+                botShot = room.Game.Fire(PlayerId.Two, RandomOpponent.ChooseTarget(room.Game.GetShotHistory(PlayerId.Two)));
+                room.Touch();
+                humanConnection = room.ConnectionIdFor(PlayerId.One);
+                if (botShot.Status == GameShotStatus.Won)
+                    revealedFleet = room.Game.GetOpponentFleet(PlayerId.One);
+            }
+            if (humanConnection is not null)
+            {
+                await Clients.Client(humanConnection).SendAsync("IncomingShot", new IncomingShotMessage(
+                    botShot.Coordinate, botShot.Status == GameShotStatus.Won ? GameShotStatus.Sunk : botShot.Status, botShot.SunkShip));
+                if (revealedFleet is not null)
+                    await Clients.Client(humanConnection).SendAsync("GameOver", new GameOverMessage(PlayerId.Two, revealedFleet));
             }
         }
 
@@ -209,7 +245,7 @@ public sealed class GameHub(IRoomStore rooms, ILogger<GameHub> logger) : Hub
                 room.Game.Phase,
                 room.Game.CurrentPlayer,
                 room.Game.CurrentPlayer == player,
-                room.ConnectionIdFor(opponent) is not null,
+                room.HasBot || room.ConnectionIdFor(opponent) is not null,
                 room.Game.HasSubmittedFleet(player),
                 room.Game.HasSubmittedFleet(opponent),
                 room.Game.GetOwnBoard(player),
@@ -217,7 +253,8 @@ public sealed class GameHub(IRoomStore rooms, ILogger<GameHub> logger) : Hub
                 room.Game.GetIncomingShotHistory(player),
                 room.Game.Phase == GamePhase.Finished
                     ? new GameOverMessage(room.Game.Winner!.Value, room.Game.GetOpponentFleet(player))
-                    : null);
+                    : null,
+                room.HasBot);
         }
     }
 

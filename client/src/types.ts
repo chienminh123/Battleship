@@ -29,6 +29,7 @@ export type ShotHistoryItem = { coordinate: Coordinate; status: GameShotStatus; 
 
 export type CreateRoomResponse = { code: string; playerToken: string; player: PlayerId }
 export type JoinRoomResponse = {
+  isBot: boolean
   code: string
   playerToken: string
   player: PlayerId
@@ -44,6 +45,7 @@ export type JoinRoomResponse = {
   result?: GameOverMessage
 }
 export type SubmitFleetResponse = {
+  ownBoard?: BoardView
   accepted: boolean
   phase: GamePhase
   error?: string

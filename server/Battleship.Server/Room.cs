@@ -17,6 +17,7 @@ public sealed class Room
 
     public string Code { get; }
     public Game Game { get; private set; }
+    public bool HasBot { get; private set; }
     public object SyncRoot { get; } = new();
     public DateTime LastActivityUtc { get; private set; } = DateTime.UtcNow;
 
@@ -106,15 +107,28 @@ public sealed class Room
 
     public void RecordFleet(PlayerId player, IReadOnlyList<FleetPlacement> placements) => _fleets[player] = placements.ToArray();
 
+    public void AddBot()
+    {
+        if (HasTwoPlayers) throw new InvalidOperationException("Room is full.");
+        HasBot = true;
+        _players[PlayerId.Two] = new PlayerSession(Guid.NewGuid().ToString("N"));
+        Game.JoinOpponent();
+        var fleet = RandomOpponent.CreateFleet();
+        Game.SubmitFleet(PlayerId.Two, fleet);
+        RecordFleet(PlayerId.Two, fleet);
+    }
+
     public bool RequestRematch(PlayerId player)
     {
         if (Game.Phase != GamePhase.Finished) return false;
         _rematchVotes.Add(player);
+        if (HasBot) _rematchVotes.Add(PlayerId.Two);
         if (_rematchVotes.Count < 2) return false;
 
         Game = new Game();
         Game.JoinOpponent();
         Game.SubmitFleet(PlayerId.One, _fleets[PlayerId.One]);
+        if (HasBot) RecordFleet(PlayerId.Two, RandomOpponent.CreateFleet());
         Game.SubmitFleet(PlayerId.Two, _fleets[PlayerId.Two]);
         _rematchVotes.Clear();
         Touch();
