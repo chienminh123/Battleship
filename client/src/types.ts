@@ -25,7 +25,7 @@ export type ShipView = {
 }
 
 export type BoardView = { ships: ShipView[]; incomingShots: Coordinate[] }
-export type ShotHistoryItem = { coordinate: Coordinate; status: GameShotStatus; sunkShip?: ShipType }
+export type ShotHistoryItem = { coordinate: Coordinate; status: GameShotStatus; sunkShip?: ShipType; sunkCells?: Coordinate[] }
 
 export type CreateRoomResponse = { code: string; playerToken: string; player: PlayerId }
 export type JoinRoomResponse = {
@@ -57,6 +57,7 @@ export type FireResponse = {
   coordinate: Coordinate
   sunkShip?: ShipType
   winner?: PlayerId
+  sunkCells?: Coordinate[]
 }
 export type GameOverMessage = { winner: PlayerId; opponentFleet: ShipView[] }
 

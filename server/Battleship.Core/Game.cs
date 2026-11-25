@@ -7,12 +7,14 @@ public sealed record FleetSubmissionResult(bool Accepted, GameActionError? Error
     IReadOnlyList<FleetValidationError>? FleetErrors = null, GamePhase Phase = GamePhase.WaitingForOpponent);
 
 public enum GameShotStatus { Miss, Hit, Sunk, Won, NotYourTurn, GameNotReady, GameFinished, OutOfBounds, AlreadyFired }
-public sealed record GameShotResult(GameShotStatus Status, Coordinate Coordinate, ShipType? SunkShip = null, PlayerId? Winner = null)
+public sealed record GameShotResult(GameShotStatus Status, Coordinate Coordinate, ShipType? SunkShip = null, PlayerId? Winner = null,
+    IReadOnlyList<Coordinate>? SunkCells = null)
 {
     public bool Accepted => Status is GameShotStatus.Miss or GameShotStatus.Hit or GameShotStatus.Sunk or GameShotStatus.Won;
 }
 
-public sealed record ShotHistoryItem(Coordinate Coordinate, GameShotStatus Status, ShipType? SunkShip = null);
+public sealed record ShotHistoryItem(Coordinate Coordinate, GameShotStatus Status, ShipType? SunkShip = null,
+    IReadOnlyList<Coordinate>? SunkCells = null);
 
 public sealed class Game
 {
@@ -94,12 +96,17 @@ public sealed class Game
             return new GameShotResult(status, coordinate);
         }
 
+        // Only reveal the cells of a fully sunk ship, never those of a live ship.
+        var sunkCells = shot.SunkShip is { } type
+            ? target.Ships.Single(ship => ship.Type == type).Cells.ToArray()
+            : null;
+
         if (target.RemainingShips == 0)
         {
             Phase = GamePhase.Finished;
             Winner = player;
-            _shotsByPlayer[player].Add(new ShotHistoryItem(coordinate, GameShotStatus.Won, shot.SunkShip));
-            return new GameShotResult(GameShotStatus.Won, coordinate, shot.SunkShip, Winner);
+            _shotsByPlayer[player].Add(new ShotHistoryItem(coordinate, GameShotStatus.Won, shot.SunkShip, sunkCells));
+            return new GameShotResult(GameShotStatus.Won, coordinate, shot.SunkShip, Winner, sunkCells);
         }
 
         CurrentPlayer = OpponentOf(player);
@@ -110,8 +117,8 @@ public sealed class Game
             BoardShotStatus.Sunk => GameShotStatus.Sunk,
             _ => throw new InvalidOperationException("Unexpected accepted shot status.")
         };
-        _shotsByPlayer[player].Add(new ShotHistoryItem(coordinate, gameStatus, shot.SunkShip));
-        return new GameShotResult(gameStatus, coordinate, shot.SunkShip);
+        _shotsByPlayer[player].Add(new ShotHistoryItem(coordinate, gameStatus, shot.SunkShip, sunkCells));
+        return new GameShotResult(gameStatus, coordinate, shot.SunkShip, SunkCells: sunkCells);
     }
 
     private Board GetBoard(PlayerId player) => player switch

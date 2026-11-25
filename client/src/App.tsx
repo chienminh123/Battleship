@@ -205,13 +205,14 @@ function BattleScreen({ state, busy, onFire }: { state: HubState; busy: boolean;
   const ownShips = state.ownBoard?.ships ?? []
   const ownCells = new Map(ownShips.flatMap((ship) => ship.cells.map((cell) => [cellKey(cell), ship])))
   const shots = new Map(state.shots.map((shot) => [cellKey(shot.coordinate), shot]))
+  const sunkEnemyCells = new Set(state.shots.flatMap((shot) => shot.sunkCells ?? []).map(cellKey))
   const incoming = new Map(state.incomingShots.map((shot) => [cellKey(shot.coordinate), shot]))
   const latestOutgoing = state.shots.at(-1), latestIncoming = state.incomingShots.at(-1)
   const chooseFocus = (value: 'enemy' | 'own') => { setFocus(value); setAutoSwitch(false) }
   const readyToFire = state.isYourTurn && state.connected && !busy
   const shotCell = (cell: Coordinate, shot: ShotHistoryItem | undefined, own: boolean) => {
     const ship = own ? ownCells.get(cellKey(cell)) : undefined
-    const sunk = own && ship?.isSunk && shot?.status !== 'Miss'
+    const sunk = Boolean(shot && shot.status !== 'Miss' && (own ? ship?.isSunk : sunkEnemyCells.has(cellKey(cell))))
     const status = sunk ? 'Sunk' : shot?.status
     const last = own ? latestIncoming : latestOutgoing
     const recent = Boolean(last && cellKey(last.coordinate) === cellKey(cell))
