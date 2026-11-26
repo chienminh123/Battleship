@@ -41,6 +41,10 @@ Players use separate browser sessions and may reconnect after a refresh or netwo
 - A computer opponent places a legal random fleet and fires uniformly at untried cells, without inspecting the human fleet to choose targets.
 - Battles emphasize the enemy board on the player's turn and the visible own fleet on the opponent's turn. Players can switch boards manually or disable automatic switching.
 - Ships are drawn as continuous silhouettes across occupied cells. Misses, hits, and sunk ships use distinct colors and symbols with a visible legend.
+- The 3D interface adds an optional Three.js ocean board with distinct ship models and shot, splash, explosion, and sinking animations. Players choose a target then confirm the shot; camera rotation is a separate mode.
+- Mobile shows one board at a time with tabs; desktop also shows the secondary board. Quality, effects volume, sea ambience, mute, and 2D fallback are player controls.
+- The 3D branch adds an optional Three.js ocean board with distinct ship models, shot/splash/explosion/sinking animation, and synthesized audio. Players select a cell then confirm their shot. Camera rotation is a separate mode.
+- On mobile, one board is shown at a time with tabs. Desktop also shows the secondary board. Quality, sound effects, ambient volume, mute, and the 2D fallback are player controls.
 
 ## Evidence on Hand
 
