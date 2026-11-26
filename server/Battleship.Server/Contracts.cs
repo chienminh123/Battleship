@@ -34,7 +34,8 @@ public sealed record FireResponse(
     GameShotStatus Status,
     Coordinate Coordinate,
     ShipType? SunkShip = null,
-    PlayerId? Winner = null);
+    PlayerId? Winner = null,
+    IReadOnlyList<Coordinate>? SunkCells = null);
 
 public sealed record GameStartedMessage(bool IsYourTurn);
 
@@ -42,7 +43,8 @@ public sealed record ShotResultMessage(
     GameShotStatus Status,
     Coordinate Coordinate,
     ShipType? SunkShip = null,
-    PlayerId? Winner = null);
+    PlayerId? Winner = null,
+    IReadOnlyList<Coordinate>? SunkCells = null);
 
 public sealed record IncomingShotMessage(
     Coordinate Coordinate,

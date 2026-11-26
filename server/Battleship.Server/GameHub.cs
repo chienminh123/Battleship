@@ -117,7 +117,7 @@ public sealed class GameHub(IRoomStore rooms, ILogger<GameHub> logger) : Hub
         if (!result.Accepted)
             return ToFireResponse(result);
 
-        await Clients.Caller.SendAsync("ShotResult", new ShotResultMessage(result.Status, result.Coordinate, result.SunkShip, result.Winner));
+        await Clients.Caller.SendAsync("ShotResult", new ShotResultMessage(result.Status, result.Coordinate, result.SunkShip, result.Winner, result.SunkCells));
         if (opponentConnection is not null)
         {
             await Clients.Client(opponentConnection).SendAsync("IncomingShot",
@@ -259,5 +259,5 @@ public sealed class GameHub(IRoomStore rooms, ILogger<GameHub> logger) : Hub
     }
 
     private static FireResponse ToFireResponse(GameShotResult result) =>
-        new(result.Accepted, result.Status, result.Coordinate, result.SunkShip, result.Winner);
+        new(result.Accepted, result.Status, result.Coordinate, result.SunkShip, result.Winner, result.SunkCells);
 }

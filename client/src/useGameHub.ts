@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr'
 import { errorText, shipNames } from './i18n'
+import type { BattleEvent } from './battlePresentation'
 import type { BoardView, Coordinate, CreateRoomResponse, FleetPlacementDto, FireResponse, GameOverMessage, GamePhase, JoinRoomResponse, PlayerId, ShotHistoryItem, SubmitFleetResponse } from './types'
 
 export type HubState = {
@@ -9,11 +10,13 @@ export type HubState = {
   opponentConnected: boolean; fleetSubmitted: boolean; opponentFleetSubmitted: boolean
   isYourTurn: boolean; ownBoard?: BoardView; shots: ShotHistoryItem[]
   incomingShots: ShotHistoryItem[]; gameOver?: GameOverMessage; message: string; error?: string
+  liveEvents: BattleEvent[]
 }
 const initialState: HubState = {
   connected: false, isBot: false, phase: 'WaitingForOpponent', roomCode: '',
   opponentConnected: false, fleetSubmitted: false, opponentFleetSubmitted: false,
   isYourTurn: false, shots: [], incomingShots: [], message: 'Đang kết nối đến máy chủ…',
+  liveEvents: [],
 }
 const roomStorageKey = 'battleship-room'
 const tokenStorageKey = 'battleship-player-token'
@@ -21,6 +24,7 @@ const tokenStorageKey = 'battleship-player-token'
 export function useGameHub() {
   const connectionRef = useRef<ReturnType<typeof HubConnectionBuilder.prototype.build> | null>(null)
   const [state, setState] = useState<HubState>(initialState)
+  const eventSequence = useRef(0)
 
   const applyJoin = useCallback((response: JoinRoomResponse) => {
     localStorage.setItem(roomStorageKey, response.code)
@@ -32,6 +36,7 @@ export function useGameHub() {
       fleetSubmitted: response.ownFleetSubmitted, opponentFleetSubmitted: response.opponentFleetSubmitted,
       ownBoard: response.ownBoard, shots: response.shotsAgainstOpponent ?? [],
       incomingShots: response.shotsAgainstYou ?? [], gameOver: response.result,
+      liveEvents: [],
       message: response.phase === 'Finished' ? 'Trận đấu đã kết thúc. Bạn có thể chơi lại hoặc trở về sảnh.'
         : response.phase === 'Playing' ? 'Đã khôi phục trận đấu.' : 'Hãy xếp đội tàu và sẵn sàng chiến đấu.', error: undefined,
     }))
@@ -68,15 +73,21 @@ export function useGameHub() {
     connection.on('OpponentLeft', () => setState((s) => ({ ...s, opponentConnected: false, message: 'Đối thủ mất kết nối. Đang chờ họ quay lại…' })))
     connection.on('RematchRequested', () => setState((s) => ({ ...s, message: 'Đối thủ muốn chơi lại. Chọn Chơi lại để đồng ý.' })))
     connection.on('GameStarted', (payload: { isYourTurn: boolean }) => setState((s) => ({ ...s, phase: 'Playing', isYourTurn: payload.isYourTurn, message: payload.isYourTurn ? 'Bạn bắn trước. Chọn một ô trên biển đối thủ.' : 'Đối thủ bắn trước. Theo dõi đội tàu của bạn.' })))
-    connection.on('ShotResult', (shot: ShotHistoryItem) => setState((s) => ({
+    connection.on('ShotResult', (shot: ShotHistoryItem) => {
+      const event: BattleEvent = { id: ++eventSequence.current, board: 'enemy', shot }
+      setState((s) => ({
       ...s, shots: [...s.shots, shot], isYourTurn: false,
+      liveEvents: [...s.liveEvents, event],
       currentPlayer: s.player === 'One' ? 'Two' : 'One',
       message: shot.status === 'Won' ? 'Bạn đã đánh chìm toàn bộ tàu đối thủ!'
         : shot.status === 'Sunk' ? `${shot.sunkShip ? shipNames[shot.sunkShip] : 'Tàu đối thủ'} đã chìm!`
           : shot.status === 'Hit' ? 'Bắn trúng tàu! Đến lượt đối thủ.' : 'Bắn trượt. Đến lượt đối thủ.',
-    })))
-    connection.on('IncomingShot', (shot: ShotHistoryItem) => setState((s) => ({
+    })) })
+    connection.on('IncomingShot', (shot: ShotHistoryItem) => {
+      const event: BattleEvent = { id: ++eventSequence.current, board: 'own', shot }
+      setState((s) => ({
       ...s, incomingShots: [...s.incomingShots, shot], isYourTurn: true, currentPlayer: s.player,
+      liveEvents: [...s.liveEvents, event],
       ownBoard: s.ownBoard ? {
         incomingShots: [...s.ownBoard.incomingShots, shot.coordinate],
         ships: s.ownBoard.ships.map((ship) => ship.cells.some((cell) => cell.x === shot.coordinate.x && cell.y === shot.coordinate.y)
@@ -84,7 +95,7 @@ export function useGameHub() {
       } : undefined,
       message: shot.status === 'Sunk' ? `${shot.sunkShip ? shipNames[shot.sunkShip] : 'Tàu của bạn'} đã bị đánh chìm!`
         : shot.status === 'Hit' ? 'Đối thủ bắn trúng tàu của bạn.' : 'Đối thủ bắn trượt!',
-    })))
+    })) })
     connection.on('GameOver', (gameOver: GameOverMessage) => setState((s) => ({ ...s, phase: 'Finished', gameOver, isYourTurn: false, message: gameOver.winner === s.player ? 'Bạn đã chiến thắng!' : 'Đội tàu của bạn đã bị đánh chìm.' })))
     connection.on('RematchStarted', restore)
     connection.start().then(async () => {
@@ -111,7 +122,9 @@ export function useGameHub() {
   const submitFleet = useCallback(async (fleet: FleetPlacementDto[]) => {
     const result = await invoke<SubmitFleetResponse>('SubmitFleet', fleet)
     if (!result.accepted) throw new Error(result.errors?.map((e) => errorText(e.code)).join(' ') ?? errorText(result.error))
-    setState((s) => ({ ...s, phase: result.phase, fleetSubmitted: true, ownBoard: result.ownBoard, error: undefined, message: result.phase === 'Playing' ? 'Đã khóa đội tàu. Trận đấu bắt đầu!' : 'Đã khóa đội tàu. Đang chờ đối thủ.' }))
+    setState((s) => ({ ...s, phase: s.phase === 'Playing' && result.phase === 'Placing' ? 'Playing' : result.phase,
+      fleetSubmitted: true, ownBoard: result.ownBoard, error: undefined,
+      message: s.phase === 'Playing' || result.phase === 'Playing' ? 'Đã khóa đội tàu. Trận đấu bắt đầu!' : 'Đã khóa đội tàu. Đang chờ đối thủ.' }))
     return result
   }, [invoke])
   const fire = useCallback((coordinate: Coordinate) => invoke<FireResponse>('Fire', coordinate.x, coordinate.y), [invoke])

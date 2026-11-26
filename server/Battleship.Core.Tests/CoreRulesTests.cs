@@ -191,6 +191,39 @@ public class CoreRulesTests
             Assert.Single(game.GetIncomingShotHistory(PlayerId.One)));
     }
 
+    [Fact]
+    public void Sunk_cells_identify_only_the_destroyed_ship_and_survive_reconnect()
+    {
+        var game = new Game();
+        game.JoinOpponent();
+        game.SubmitFleet(PlayerId.One, Fleet);
+        game.SubmitFleet(PlayerId.Two, Fleet);
+
+        // Cruiser and destroyer touch the submarine. Partial hits on either
+        // neighbour must not be included when the submarine sinks.
+        Coordinate[] targets = [new(0, 2), new(0, 4), new(2, 3), new(0, 3), new(1, 3)];
+        GameShotResult? result = null;
+        for (var index = 0; index < targets.Length; index++)
+        {
+            result = game.Fire(PlayerId.One, targets[index]);
+            if (index < targets.Length - 1)
+            {
+                Assert.Equal(GameShotStatus.Hit, result.Status);
+                Assert.Null(result.SunkCells);
+            }
+            game.Fire(PlayerId.Two, new Coordinate(index, 9));
+        }
+
+        Coordinate[] submarine = [new(0, 3), new(1, 3), new(2, 3)];
+        Assert.Equal(GameShotStatus.Sunk, result!.Status);
+        Assert.Equal(ShipType.Submarine, result.SunkShip);
+        Assert.Equal(submarine, result.SunkCells);
+        Assert.Equal(submarine, game.GetShotHistory(PlayerId.One).Last().SunkCells);
+        Assert.Equal(submarine, game.GetIncomingShotHistory(PlayerId.Two).Last().SunkCells);
+        Assert.All(game.GetShotHistory(PlayerId.One).SkipLast(1), shot => Assert.Null(shot.SunkCells));
+        Assert.Throws<InvalidOperationException>(() => game.GetOpponentFleet(PlayerId.One));
+    }
+
     private static Board CreateBoard()
     {
         var board = new Board();
