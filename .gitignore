@@ -5,3 +5,8 @@ client/node_modules/
 client/dist/
 artifacts/
 .npm-cache/
+**/App_Data/
+*.db
+*.db-shm
+*.db-wal
+server/Battleship.Server/Data/keys/

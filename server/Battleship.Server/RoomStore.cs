@@ -32,7 +32,11 @@ public sealed class InMemoryRoomStore : IRoomStore
         throw new InvalidOperationException("Unable to allocate a unique room code.");
     }
 
-    public bool TryGet(string code, out Room room) => _rooms.TryGetValue(code.Trim(), out room!);
+    public bool TryGet(string code, out Room room)
+    {
+        room = null!;
+        return !string.IsNullOrWhiteSpace(code) && _rooms.TryGetValue(code.Trim(), out room!);
+    }
 
     public bool TryRemove(string code, out Room? room) => _rooms.TryRemove(code, out room);
 

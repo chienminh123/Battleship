@@ -1,4 +1,5 @@
 using Battleship.Core;
+using Battleship.Server.Data;
 
 namespace Battleship.Server;
 
@@ -18,7 +19,13 @@ public sealed record JoinRoomResponse(
     IReadOnlyList<ShotHistoryItem> ShotsAgainstOpponent,
     IReadOnlyList<ShotHistoryItem> ShotsAgainstYou,
     GameOverMessage? Result = null,
-    bool IsBot = false);
+    bool IsBot = false,
+    BotDifficulty? BotDifficulty = null,
+    IReadOnlyList<ChatMessage>? ChatMessages = null,
+    string? MatchId = null,
+    MatchMode Mode = MatchMode.Friendly,
+    DateTime? TurnDeadlineUtc = null,
+    DateTime? PlacementDeadlineUtc = null);
 
 public sealed record FleetPlacementDto(ShipType Type, Coordinate Start, Orientation Orientation);
 
@@ -37,21 +44,23 @@ public sealed record FireResponse(
     PlayerId? Winner = null,
     IReadOnlyList<Coordinate>? SunkCells = null);
 
-public sealed record GameStartedMessage(bool IsYourTurn);
+public sealed record GameStartedMessage(bool IsYourTurn, DateTime? TurnDeadlineUtc = null);
 
 public sealed record ShotResultMessage(
     GameShotStatus Status,
     Coordinate Coordinate,
     ShipType? SunkShip = null,
     PlayerId? Winner = null,
-    IReadOnlyList<Coordinate>? SunkCells = null);
+    IReadOnlyList<Coordinate>? SunkCells = null,
+    DateTime? TurnDeadlineUtc = null);
 
 public sealed record IncomingShotMessage(
     Coordinate Coordinate,
     GameShotStatus Status,
-    ShipType? SunkShip = null);
+    ShipType? SunkShip = null,
+    DateTime? TurnDeadlineUtc = null);
 
-public sealed record GameOverMessage(PlayerId Winner, IReadOnlyList<ShipView> OpponentFleet);
+public sealed record GameOverMessage(PlayerId Winner, IReadOnlyList<ShipView> OpponentFleet, string? Reason = null);
 
 public sealed record OpponentJoinedMessage(PlayerId Player);
 public sealed record OpponentReconnectedMessage(PlayerId Player);

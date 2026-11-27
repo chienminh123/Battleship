@@ -1,16 +1,17 @@
 import type { GameShotStatus } from './types'
+import { createSurfBuffer } from './oceanAudio'
 
-type SoundSettings = { muted: boolean; effects: number; sea: number; playing: boolean }
+type SoundSettings = { muted: boolean; effects: number; sea: number }
 
 // Synthesized locally: no downloads, audio licensing, or network latency per shot.
-class BattleSound {
+export class BattleSound {
   private context?: AudioContext
   private master?: GainNode
   private effects?: GainNode
   private ambience?: GainNode
   private noise?: AudioBuffer
   private timers = new Set<ReturnType<typeof setTimeout>>()
-  private settings: SoundSettings = { muted: false, effects: .65, sea: .12, playing: false }
+  private settings: SoundSettings = { muted: false, effects: .65, sea: .18 }
 
   unlock() {
     try {
@@ -18,10 +19,13 @@ class BattleSound {
         const context = new AudioContext()
         this.context = context
         this.master = context.createGain()
+        this.master.gain.value = 0
         this.master.connect(context.destination)
         this.effects = context.createGain()
+        this.effects.gain.value = this.settings.effects
         this.effects.connect(this.master)
         this.ambience = context.createGain()
+        this.ambience.gain.value = 0
         this.ambience.connect(this.master)
         const noise = context.createBuffer(1, context.sampleRate * 3, context.sampleRate)
         const samples = noise.getChannelData(0)
@@ -32,13 +36,13 @@ class BattleSound {
         }
         this.noise = noise
         const sea = context.createBufferSource()
-        sea.buffer = noise; sea.loop = true
+        sea.buffer = createSurfBuffer(context); sea.loop = true
         const filter = context.createBiquadFilter()
-        filter.type = 'lowpass'; filter.frequency.value = 420
+        filter.type = 'lowpass'; filter.frequency.value = 2400
         sea.connect(filter).connect(this.ambience); sea.start()
         this.configure(this.settings)
       }
-      if (this.context.state === 'suspended') void this.context.resume().catch(() => {})
+      if (!document.hidden && this.context.state === 'suspended') void this.context.resume().catch(() => {})
     } catch { /* Audio is optional; gameplay continues if unavailable. */ }
   }
 
@@ -47,10 +51,20 @@ class BattleSound {
     const time = this.context?.currentTime ?? 0
     this.master?.gain.setTargetAtTime(settings.muted || document.hidden ? 0 : 1, time, .05)
     this.effects?.gain.setTargetAtTime(settings.effects, time, .05)
-    this.ambience?.gain.setTargetAtTime(settings.playing ? settings.sea * .35 : 0, time, .3)
+    this.ambience?.gain.setTargetAtTime(settings.sea * .65, time, .45)
   }
 
-  visibility() { this.configure(this.settings) }
+  visibility() {
+    this.configure(this.settings)
+    const context = this.context
+    if (!context) return
+    if (document.hidden) {
+      void context.suspend().then(() => {
+        // A quick tab switch can finish suspending after the tab is visible again.
+        if (!document.hidden) void context.resume().catch(() => {})
+      }).catch(() => {})
+    } else if (context.state === 'suspended') void context.resume().catch(() => {})
+  }
 
   private later(callback: () => void, delay: number) {
     const timer = setTimeout(() => { this.timers.delete(timer); callback() }, delay)

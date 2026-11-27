@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/server/">
     <Project Path="server/Battleship.Core.Tests/Battleship.Core.Tests.csproj" />
+    <Project Path="server/Battleship.Server.Tests/Battleship.Server.Tests.csproj" />
     <Project Path="server/Battleship.Core/Battleship.Core.csproj" />
     <Project Path="server/Battleship.Server/Battleship.Server.csproj" />
   </Folder>

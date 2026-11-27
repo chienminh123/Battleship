@@ -12,10 +12,11 @@ const connect = async () => {
 const fleet = ['Carrier', 'Battleship', 'Cruiser', 'Submarine', 'Destroyer'].map((type, i) => ({
   type, start: { x: 0, y: i * 2 }, orientation: 'Horizontal',
 }))
-try {
+async function playDifficulty(difficulty) {
   let client = await connect()
-  const created = await client.invoke('CreateBotRoom')
+  const created = await client.invoke('CreateBotRoomWithDifficulty', difficulty)
   assert.equal(created.isBot, true)
+  assert.equal(created.botDifficulty, difficulty)
   assert.equal(created.phase, 'Placing')
   assert.equal(created.opponentFleetSubmitted, true)
   assert.equal(created.ownBoard.ships.length, 0)
@@ -46,15 +47,16 @@ try {
       attach()
       const resumed = await client.invoke('JoinRoom', created.code, created.playerToken)
       assert.equal(resumed.isBot, true)
+      assert.equal(resumed.botDifficulty, difficulty)
       assert.equal(resumed.isYourTurn, true)
       assert.equal(resumed.ownBoard.ships.length, 5)
       assert.equal(resumed.shotsAgainstOpponent.length, 1)
       assert.equal(resumed.shotsAgainstYou.length, 1)
       assert.equal(resumed.result, null)
     }
-    if ((index + 1) % 20 === 0) console.log(`Bot match: ${index + 1} turns verified`)
+    if ((index + 1) % 20 === 0) console.log(`${difficulty}: ${index + 1} turns verified`)
   }
-  assert.ok(result, 'A complete random match must end within 100 turns')
+  assert.ok(result, `${difficulty}: a complete match must end within 100 turns`)
   assert.equal(result.opponentFleet.length, 5)
   assert.equal(new Set(botShots.map((shot) => `${shot.coordinate.x},${shot.coordinate.y}`)).size, botShots.length)
   for (const ship of result.opponentFleet) {
@@ -65,13 +67,30 @@ try {
   assert.equal(finished.phase, 'Finished')
   await client.invoke('Rematch')
   const reset = await client.invoke('JoinRoom', created.code, created.playerToken)
-  assert.equal(reset.phase, 'Playing')
+  assert.equal(reset.phase, 'Placing')
   assert.equal(reset.isBot, true)
+  assert.equal(reset.botDifficulty, difficulty)
   assert.equal(reset.shotsAgainstOpponent.length, 0)
   assert.equal(reset.shotsAgainstYou.length, 0)
-  assert.equal(reset.ownBoard.ships.length, 5)
-  assert.equal(reset.isYourTurn, true)
-  console.log('Bot smoke passed: valid fleets, private room, no repeated shots, reconnect, complete match, and rematch.')
+  assert.equal(reset.ownBoard.ships.length, 0)
+  assert.equal(reset.ownFleetSubmitted, false)
+  assert.equal(reset.opponentFleetSubmitted, true)
+  assert.equal(reset.isYourTurn, false)
+  assert.equal((await client.invoke('Fire', 0, 0)).status, 'GameNotReady')
+  const nextRound = await client.invoke('SubmitFleet', fleet)
+  assert.equal(nextRound.phase, 'Playing')
+  const ready = await client.invoke('Reconnect', created.code, created.playerToken)
+  assert.equal(ready.botDifficulty, difficulty)
+  assert.equal(ready.isYourTurn, true)
+  botShots.length = 0
+  assert.equal((await client.invoke('Fire', 0, 0)).accepted, true)
+  assert.equal(botShots.length, 1)
+  console.log(`${difficulty} smoke passed: private fleet, no repeated shots, reconnect, complete match, and a playable rematch with the same level.`)
+}
+try {
+  // Independent rooms share one server; run concurrently to keep the real
+  // presentation delay while testing every level within one match duration.
+  await Promise.all(['Easy', 'Hard', 'Annihilation'].map(playDifficulty))
 } finally {
   await Promise.allSettled(connections.map((client) => client.stop()))
 }

@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  client:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci --prefix client
+      # Use project files so this job also works with the .NET 8 SDK (no slnx support).
+      - run: dotnet restore server/Battleship.Core.Tests/Battleship.Core.Tests.csproj --configfile NuGet.Config
+      - run: dotnet restore server/Battleship.Server.Tests/Battleship.Server.Tests.csproj --configfile NuGet.Config
+      - run: dotnet test server/Battleship.Core.Tests/Battleship.Core.Tests.csproj --no-restore --configuration Release
+      - run: dotnet test server/Battleship.Server.Tests/Battleship.Server.Tests.csproj --no-restore --configuration Release
+      - name: Run game, bot, chat and HTTP platform smoke tests with restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          server_pid=""
+          stop_server() {
+            if [ -n "$server_pid" ]; then
+              kill "$server_pid" 2>/dev/null || true
+              wait "$server_pid" 2>/dev/null || true
+              server_pid=""
+            fi
+          }
+          trap stop_server EXIT
+          start_server() {
+            dotnet server/Battleship.Server/bin/Release/net8.0/Battleship.Server.dll \
+              --environment Production --urls http://127.0.0.1:8181 \
+              --Storage:Directory "$RUNNER_TEMP/battleship-platform" > server.log 2>&1 &
+            server_pid=$!
+            for attempt in $(seq 1 45); do
+              if curl --fail --silent http://127.0.0.1:8181/health; then return; fi
+              if ! kill -0 "$server_pid" 2>/dev/null; then cat server.log; return 1; fi
+              sleep 1
+            done
+            cat server.log
+            return 1
+          }
+          export BATTLESHIP_HUB_URL=http://127.0.0.1:8181/hub/game
+          export BATTLESHIP_API_URL=http://127.0.0.1:8181
+          start_server
+          npm run test:smoke --prefix client
+          npm run test:bot --prefix client
+          # Reset only the room creation quota between independent smoke groups.
+          stop_server
+          start_server
+          npm run test:chat --prefix client
+          stop_server
+          start_server
+          npm run test:platform --prefix client
+          stop_server
+          start_server
+          npm run test:platform --prefix client -- --verify-restart

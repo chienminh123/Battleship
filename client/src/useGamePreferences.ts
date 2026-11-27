@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { GraphicsQuality } from './battlePresentation'
 
 export type GamePreferences = { muted: boolean; effects: number; sea: number; quality: GraphicsQuality }
-const defaults: GamePreferences = { muted: false, effects: .65, sea: .12, quality: 'auto' }
+const defaults: GamePreferences = { muted: false, effects: .65, sea: .18, quality: 'auto' }
 
 export function useGamePreferences() {
   const [preferences, setPreferences] = useState<GamePreferences>(() => {

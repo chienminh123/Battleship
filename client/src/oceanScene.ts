@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { createShipModel } from './oceanModels'
 import { effectDuration, shotStatus, sunkCellKeys, validCell } from './battlePresentation'
 import type { BattleEvent, GraphicsQuality } from './battlePresentation'
 import type { Coordinate, ShipView, ShotHistoryItem } from './types'
@@ -13,7 +14,7 @@ function makeLabelTexture(value: string, small = false) {
   context.clearRect(0, 0, 192, 192)
   context.fillStyle = '#e0f2ed'
   context.textAlign = 'center'; context.textBaseline = 'middle'
-  context.font = `600 ${small ? 74 : 86}px "DM Sans", sans-serif`
+  context.font = `600 ${small ? 96 : 112}px "DM Sans", sans-serif`
   context.shadowColor = '#061f2c'; context.shadowBlur = 12
   context.fillText(value, 96, 96)
   const texture = new THREE.CanvasTexture(canvas)
@@ -22,96 +23,14 @@ function makeLabelTexture(value: string, small = false) {
   return texture
 }
 
-function makeHull(length: number) {
-  const shape = new THREE.Shape()
-  shape.moveTo(-length / 2 + .10, -.37)
-  shape.lineTo(length / 2 - .24, -.37)
-  shape.quadraticCurveTo(length / 2 - .07, -.37, length / 2 + .22, 0)
-  shape.quadraticCurveTo(length / 2 - .07, .37, length / 2 - .24, .37)
-  shape.lineTo(-length / 2 + .10, .37)
-  shape.quadraticCurveTo(-length / 2 - .10, .37, -length / 2 - .10, 0)
-  shape.quadraticCurveTo(-length / 2 - .10, -.37, -length / 2 + .10, -.37)
-  return new THREE.ExtrudeGeometry(shape, { depth: .19, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: .035, bevelThickness: .035 })
-}
-
 function addShip(group: THREE.Group, ship: ShipView) {
   if (!ship.cells.length) return
   const horizontal = ship.cells.length < 2 || ship.cells[0].y === ship.cells[1].y
-  const row = ship.cells[0].y, column = ship.cells[0].x
-  const centreX = (column + (horizontal ? (ship.cells.length - 1) / 2 : 0) - 4.5) * STEP
-  const centreZ = (row + (horizontal ? 0 : (ship.cells.length - 1) / 2) - 4.5) * STEP
-  const hull = new THREE.Group()
-  hull.position.set(centreX, .25 + (row % 3) * .012, centreZ)
+  const first = ship.cells[0]
+  const hull = createShipModel(ship)
+  hull.position.set((first.x + (horizontal ? (ship.cells.length - 1) / 2 : 0) - 4.5) * STEP,
+    .10, (first.y + (horizontal ? 0 : (ship.cells.length - 1) / 2) - 4.5) * STEP)
   hull.rotation.y = horizontal ? 0 : -Math.PI / 2
-  const scale = ship.isSunk ? .87 : 1
-  hull.scale.setScalar(scale)
-  const shipColors: Record<string, string> = {
-    Carrier: '#73baae', Battleship: '#57a59f', Cruiser: '#72a7c6', Submarine: '#bea776', Destroyer: '#86c4b8',
-  }
-  const material = new THREE.MeshStandardMaterial({
-    color: ship.isSunk ? '#7b474e' : shipColors[ship.type] ?? '#84c4b4',
-    roughness: .48, metalness: .28, flatShading: false,
-  })
-  const darkMetal = new THREE.MeshStandardMaterial({ color: '#173946', roughness: .4, metalness: .5 })
-  const cabinMaterial = new THREE.MeshStandardMaterial({ color: '#d5ebe0', roughness: .38, metalness: .12 })
-  const deckGeometry = new THREE.ExtrudeGeometry((() => {
-    const deck = new THREE.Shape()
-    const half = ship.cells.length * STEP * .43
-    deck.moveTo(-half, -.25); deck.lineTo(half - .16, -.25); deck.lineTo(half, 0)
-    deck.lineTo(half - .16, .25); deck.lineTo(-half, .25); deck.closePath()
-    return deck
-  })(), { depth: .08, bevelEnabled: false })
-  const deck = new THREE.Mesh(deckGeometry, darkMetal)
-  deck.rotation.x = -Math.PI / 2; deck.position.y = .40; hull.add(deck)
-  const body = new THREE.Mesh(makeHull(ship.cells.length * STEP * .91), material)
-  body.rotation.x = -Math.PI / 2; body.position.y = .18; hull.add(body)
-
-  const length = ship.cells.length
-  const bridge = new THREE.Group()
-  const block = new THREE.Mesh(new THREE.BoxGeometry(.42, .24, .40), cabinMaterial)
-  block.position.set(-length * STEP * .11, .63, -.04); bridge.add(block)
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(.25, .07, .24), darkMetal)
-  roof.position.set(-length * STEP * .11, .79, -.04); bridge.add(roof)
-  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(.015, .025, .28, 6), cabinMaterial)
-  antenna.position.set(-length * STEP * .11, .92, -.04); bridge.add(antenna)
-  const bridgeBase = new THREE.Mesh(new THREE.BoxGeometry(.82, .06, .58), material)
-  bridgeBase.position.set(-length * STEP * .11, .49, -.04); bridge.add(bridgeBase)
-  hull.add(bridge)
-
-  const gunGroup = new THREE.Group()
-  const turret = new THREE.Mesh(new THREE.CylinderGeometry(.16, .20, .12, 10), cabinMaterial)
-  turret.position.set(length * STEP * .24, .55, .02); gunGroup.add(turret)
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(.035, .05, .34, 8), darkMetal)
-  barrel.rotation.z = Math.PI / 2; barrel.position.set(length * STEP * .24 + .20, .62, .02); gunGroup.add(barrel)
-  hull.add(gunGroup)
-
-  const portholes = new THREE.MeshStandardMaterial({ color: '#d6f2e8', emissive: '#81c8b0', emissiveIntensity: .45 })
-  for (let i = 0; i < Math.min(length, 5); i++) {
-    const porthole = new THREE.Mesh(new THREE.SphereGeometry(.035, 8, 8), portholes)
-    porthole.position.set(-length * STEP * .32 + i * STEP * .16, .29, -.372)
-    hull.add(porthole)
-  }
-  if (ship.type == 'Carrier') {
-    gunGroup.visible = false
-    const runway = new THREE.Mesh(new THREE.BoxGeometry(length * STEP * .66, .015, .38), darkMetal)
-    runway.position.set(.22, .49, .08); hull.add(runway)
-    for (let i = 0; i < 7; i++) {
-      const dash = new THREE.Mesh(new THREE.BoxGeometry(.19, .02, .025), cabinMaterial)
-      dash.position.set(-1.25 + i * .43, .51, .08); hull.add(dash)
-    }
-    bridge.position.z = -.20
-  } else if (ship.type === 'Submarine') {
-    body.visible = false; deck.visible = false; gunGroup.visible = false; bridge.visible = false
-    const tube = new THREE.Mesh(new THREE.CapsuleGeometry(.29, length * STEP * .71, 4, 12), material)
-    tube.rotation.z = Math.PI / 2; tube.position.y = .24; hull.add(tube)
-    const tower = new THREE.Mesh(new THREE.BoxGeometry(.54, .27, .28), darkMetal)
-    tower.position.set(-.2, .51, 0); hull.add(tower)
-    const scope = new THREE.Mesh(new THREE.CylinderGeometry(.025, .025, .34, 6), cabinMaterial)
-    scope.position.set(-.2, .79, 0); hull.add(scope)
-  } else if (ship.type === 'Battleship') {
-    const aft = gunGroup.clone(); aft.position.x = -length * STEP * .46; hull.add(aft)
-  }
-  hull.name = `ship-${ship.type}`
   group.add(hull)
   return hull
 }
@@ -254,30 +173,55 @@ export function createOceanScene(mount: HTMLDivElement) {
   fill.position.set(10, 7, -8); sceneRoot.add(fill)
   const seaMaterial = new THREE.ShaderMaterial({
     uniforms: { time: { value: 0 } },
-    vertexShader: `varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
-    fragmentShader: `uniform float time; varying vec2 vUv;
-      void main(){vec2 p=vUv*65.; float wave=sin(p.x*2.+time*.5+sin(p.y*1.6))*.5+.5;
-      float fine=pow(max(0.,sin(p.x*4.-p.y*3.+time*.4)),18.);
-      vec3 color=mix(vec3(.035,.14,.18),vec3(.07,.23,.27),wave*.12);
-      gl_FragColor=vec4(color+vec3(.06,.13,.13)*fine*.10,1.);}`,
+    vertexShader: `varying vec2 vSea;
+      void main(){vec4 world=modelMatrix*vec4(position,1.0);vSea=world.xz;gl_Position=projectionMatrix*viewMatrix*world;}`,
+    fragmentShader: `uniform float time; varying vec2 vSea;
+      float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+      float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+        return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1)),f.x),f.y);}
+      float height(vec2 p){
+        float t=time*.65;
+        return sin(p.x*2.1+p.y*1.7-t+noise(p*.8)*2.)*.34
+          +sin(p.x*5.4-p.y*2.6+t*1.3+noise(p*1.5)*3.)*.14
+          +sin(p.x*13.+p.y*7.-t*2.+noise(p*3.)*4.)*.055;
+      }
+      void main(){
+        vec2 p=vSea; float h=height(p);
+        vec3 n=normalize(vec3((h-height(p+vec2(.035,0)))*5.,1.,(h-height(p+vec2(0,.035)))*5.));
+        float diffuse=clamp(dot(n,normalize(vec3(-.6,1.,-.5))),0.,1.);
+        float swell=noise(p*.25+vec2(time*.006,0));
+        vec3 color=mix(vec3(.025,.105,.145),vec3(.055,.225,.265),swell*.6+diffuse*.3);
+        float glint=pow(max(0.,dot(n,normalize(vec3(-.2,1.,.5)))),38.);
+        float ripple=pow(max(0.,sin(p.x*25.+p.y*16.+noise(p*3.)*7.+time*.5)),18.);
+        float crest=smoothstep(.30,.48,h)*smoothstep(.48,.82,noise(p*2.2-vec2(time*.12,time*.08)));
+        color+=vec3(.22,.36,.36)*glint*.32+vec3(.09,.18,.20)*ripple*.20;
+        color=mix(color,vec3(.31,.48,.49),crest*.30);
+        gl_FragColor=vec4(color,1.);
+      }`,
   })
   const sea = new THREE.Mesh(new THREE.PlaneGeometry(180, 180), seaMaterial)
   sea.rotation.x = -Math.PI / 2; sea.position.y = -.31; sceneRoot.add(sea)
-  const base = new THREE.Mesh(new THREE.BoxGeometry(BOARD + .32, .27, BOARD + .32), new THREE.MeshStandardMaterial({ color: '#295562', roughness: .5, metalness: .2 }))
-  base.position.y = -.04; sceneRoot.add(base)
-  const tiles: THREE.Mesh[] = []
-  const tileGeometry = new THREE.BoxGeometry(STEP - .025, .065, STEP - .025)
-  const tileMaterials = ['#225765', '#255e6b', '#205361', '#285d69'].map((color) => new THREE.MeshStandardMaterial({ color, metalness: .2, roughness: .4 }))
-  for (let y = 0; y < 10; y++) for (let x = 0; x < 10; x++) {
-    const tile = new THREE.Mesh(tileGeometry, tileMaterials[(x * 3 + y * 5 + x * y) % 4])
-    tile.position.set((x - 4.5) * STEP, .16, (y - 4.5) * STEP)
-    tile.userData.coordinate = { x, y }; tiles.push(tile); sceneRoot.add(tile)
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(BOARD, BOARD), seaMaterial)
+  water.rotation.x = -Math.PI / 2; water.position.y = .16; sceneRoot.add(water)
+  // Raycast the continuous surface, then map its world position to the 10×10 grid.
+  const gridPoints: THREE.Vector3[] = []
+  for (let i = 0; i <= 10; i++) {
+    const p = -BOARD / 2 + i * STEP
+    gridPoints.push(new THREE.Vector3(p, .19, -BOARD / 2), new THREE.Vector3(p, .19, BOARD / 2),
+      new THREE.Vector3(-BOARD / 2, .19, p), new THREE.Vector3(BOARD / 2, .19, p))
   }
+  sceneRoot.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(gridPoints),
+    new THREE.LineBasicMaterial({ color: '#9bced5', transparent: true, opacity: .24 })))
+  const border = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-BOARD/2, .20, -BOARD/2), new THREE.Vector3(BOARD/2, .20, -BOARD/2),
+    new THREE.Vector3(BOARD/2, .20, BOARD/2), new THREE.Vector3(-BOARD/2, .20, BOARD/2),
+  ]), new THREE.LineBasicMaterial({ color: '#87bac3', transparent: true, opacity: .7 }))
+  sceneRoot.add(border)
   for (let i = 0; i < 10; i++) {
     for (const axis of ['x', 'y']) {
       const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeLabelTexture(axis === 'x' ? String.fromCharCode(65 + i) : String(i + 1)), depthWrite: false, depthTest: false, toneMapped: false }))
       label.position.set(axis === 'x' ? (i - 4.5) * STEP : -6.05, .35, axis === 'x' ? -6.05 : (i - 4.5) * STEP)
-      label.scale.set(.55, .55, 1); sceneRoot.add(label)
+      label.scale.set(.78, .78, 1); sceneRoot.add(label)
     }
   }
   const fleetGroup = new THREE.Group(), marks = new THREE.Group(), preview = new THREE.Group(), effects = new THREE.Group()
@@ -314,12 +258,20 @@ export function createOceanScene(mount: HTMLDivElement) {
     camera.top = halfHeight; camera.bottom = -halfHeight; camera.updateProjectionMatrix()
   }
   const observer = new ResizeObserver(frame); observer.observe(mount)
+  let inView = true
+  const visibilityObserver = typeof IntersectionObserver === 'undefined' ? undefined : new IntersectionObserver(([entry]) => {
+    inView = entry.isIntersecting
+  })
+  visibilityObserver?.observe(mount)
   const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2()
   const locate = (event: PointerEvent) => {
     const bounds = canvas.getBoundingClientRect()
     mouse.set((event.clientX - bounds.left) / bounds.width * 2 - 1, 1 - (event.clientY - bounds.top) / bounds.height * 2)
     raycaster.setFromCamera(mouse, camera)
-    return raycaster.intersectObjects(tiles, false)[0]?.object.userData.coordinate as Coordinate | undefined
+    const point = raycaster.intersectObject(water, false)[0]?.point
+    if (!point) return
+    const cell = { x: Math.floor((point.x + BOARD / 2) / STEP), y: Math.floor((point.z + BOARD / 2) / STEP) }
+    return validCell(cell) ? cell : undefined
   }
   const down = (event: PointerEvent) => {
     if (event.button !== 0 || pointer) return
@@ -368,13 +320,26 @@ export function createOceanScene(mount: HTMLDivElement) {
   canvas.addEventListener('pointerleave', leave); canvas.addEventListener('keydown', keydown)
   canvas.addEventListener('webglcontextlost', contextLost); canvas.addEventListener('webglcontextrestored', contextRestored)
 
-  let raf = 0, lastFrame = 0
+  let raf = 0, lastFrame = 0, lastTick = 0, seaTime = 0
   const render = (now: number) => {
     if (disposed) return
     raf = requestAnimationFrame(render)
-    if (!mount.clientWidth || !mount.clientHeight || document.hidden || lost || now - lastFrame < 1000 / (mini ? 20 : low ? 30 : 60)) return
+    const elapsed = lastTick ? Math.min((now - lastTick) / 1000, .1) : 0
+    lastTick = now
+    if (!mount.clientWidth || !mount.clientHeight || document.hidden || !inView || lost) return
+    if (!reducedMotion.matches) seaTime += elapsed
+    if (now - lastFrame < 1000 / (mini ? 20 : low ? 30 : 60)) return
     lastFrame = now
-    seaMaterial.uniforms.time.value = reducedMotion.matches ? 0 : now / 1000
+    seaMaterial.uniforms.time.value = reducedMotion.matches ? 0 : seaTime
+    for (const model of models.values()) {
+      if (sinking.has(model) || model.userData.sunk) continue
+      const body = model.getObjectByName('ship-body')
+      if (!body) continue
+      const phase = seaTime * .8 + model.position.x * .3 + model.position.z * .2
+      body.position.y = reducedMotion.matches ? 0 : Math.sin(phase) * .018
+      body.rotation.x = reducedMotion.matches ? 0 : Math.sin(phase * .83) * .003
+      body.rotation.z = reducedMotion.matches ? 0 : Math.cos(phase) * .0035
+    }
     for (const [model, sink] of sinking) {
       const p = THREE.MathUtils.clamp((now - sink.start - 280) / 1650, 0, 1)
       model.position.y = sink.y - p * p * 2.3
@@ -393,9 +358,12 @@ export function createOceanScene(mount: HTMLDivElement) {
         effects.remove(effect.root); disposeTree(effect.root); activeEffects.splice(i, 1)
       } else updateEffect(effect, now)
     }
+    renderer.render(scene, camera)
+    mount.dataset.seaTime = seaMaterial.uniforms.time.value.toFixed(2)
+    mount.dataset.drawCalls = String(renderer.info.render.calls)
+    mount.dataset.triangles = String(renderer.info.render.triangles)
     mount.dataset.activeEffects = String(activeEffects.length)
     mount.dataset.sinkingShips = String(sinking.size)
-    renderer.render(scene, camera)
   }
   raf = requestAnimationFrame(render)
 
@@ -472,7 +440,7 @@ export function createOceanScene(mount: HTMLDivElement) {
       initialized = true
     },
     dispose() {
-      disposed = true; cancelAnimationFrame(raf); observer.disconnect()
+      disposed = true; cancelAnimationFrame(raf); observer.disconnect(); visibilityObserver?.disconnect()
       canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', move)
       canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', cancel)
       canvas.removeEventListener('pointerleave', leave); canvas.removeEventListener('keydown', keydown)

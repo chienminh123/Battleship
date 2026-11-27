@@ -6,3 +6,8 @@ artifacts/
 **/obj/
 client/node_modules/
 client/dist/
+**/App_Data/
+**/keys/
+**/*.db
+**/*.db-shm
+**/*.db-wal

@@ -1,4 +1,5 @@
 export type PlayerId = 'One' | 'Two'
+export type BotDifficulty = 'Easy' | 'Hard' | 'Annihilation'
 export type GamePhase = 'WaitingForOpponent' | 'Placing' | 'Playing' | 'Finished'
 export type ShipType = 'Carrier' | 'Battleship' | 'Cruiser' | 'Submarine' | 'Destroyer'
 export type Orientation = 'Horizontal' | 'Vertical'
@@ -14,6 +15,11 @@ export type GameShotStatus =
   | 'AlreadyFired'
 
 export type Coordinate = { x: number; y: number }
+export type ChatMessage = {
+  id: number; clientMessageId?: string | null; sender?: PlayerId | null; content: string
+  sentAt: string; round: number; isSystem: boolean
+}
+export type ChatEnvelope = { roomCode: string; message: ChatMessage }
 export type FleetPlacement = { type: ShipType; start: Coordinate; orientation: Orientation }
 export type FleetPlacementDto = FleetPlacement
 
@@ -30,6 +36,12 @@ export type ShotHistoryItem = { coordinate: Coordinate; status: GameShotStatus; 
 export type CreateRoomResponse = { code: string; playerToken: string; player: PlayerId }
 export type JoinRoomResponse = {
   isBot: boolean
+  botDifficulty?: BotDifficulty | null
+  chatMessages?: ChatMessage[] | null
+  matchId?: string
+  mode?: 'Bot' | 'Friendly' | 'Ranked'
+  turnDeadlineUtc?: string | null
+  placementDeadlineUtc?: string | null
   code: string
   playerToken: string
   player: PlayerId
@@ -59,7 +71,7 @@ export type FireResponse = {
   winner?: PlayerId
   sunkCells?: Coordinate[]
 }
-export type GameOverMessage = { winner: PlayerId; opponentFleet: ShipView[] }
+export type GameOverMessage = { winner: PlayerId; opponentFleet: ShipView[]; reason?: string | null }
 
 export const fleetSpecs: { type: ShipType; length: number; mark: string }[] = [
   { type: 'Carrier', length: 5, mark: 'CV' },

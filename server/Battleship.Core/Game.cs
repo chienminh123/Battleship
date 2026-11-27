@@ -46,6 +46,15 @@ public sealed class Game
 
     public bool HasSubmittedFleet(PlayerId player) => _submittedFleets.Contains(player);
 
+    public bool Forfeit(PlayerId player)
+    {
+        if (Phase != GamePhase.Playing) return false;
+        Winner = OpponentOf(player);
+        Phase = GamePhase.Finished;
+        CurrentPlayer = null;
+        return true;
+    }
+
     public IReadOnlyList<ShipView> GetOpponentFleet(PlayerId player)
     {
         if (Phase != GamePhase.Finished)

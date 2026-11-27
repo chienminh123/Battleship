@@ -1,26 +1,20 @@
-import { Fragment } from 'react'
+import { Fragment, useRef } from 'react'
 import type { ReactNode } from 'react'
 import type { Coordinate, ShipView } from './types'
 import { shipNames } from './i18n'
 import { letters } from './coordinates'
-
-export function ShipDrawing({ length, vertical = false }: { length: number; vertical?: boolean }) {
-  const width = length * 100
-  return <svg className="ship-drawing" viewBox={vertical ? `0 0 100 ${width}` : `0 0 ${width} 100`} preserveAspectRatio="none" aria-hidden="true">
-    <g transform={vertical ? 'translate(100 0) rotate(90)' : undefined}>
-      <path className="ship-hull" d={`M12 22 Q8 50 12 78 H${width - 65} L${width - 9} 50 L${width - 65} 22 Z`} />
-      <path className="ship-deck" d={`M30 34 H${width - 85} L${width - 48} 50 L${width - 85} 66 H30 Z`} />
-      <rect className="ship-bridge" x={width * .4} y="29" width="36" height="42" rx="4" />
-      <path className="ship-detail" d={`M${width * .4 + 18} 36 V64 M45 50 H${width * .32} M${width * .65} 50 H${width - 70}`} />
-    </g>
-  </svg>
-}
+import { ShipDrawing } from './ShipDrawing'
+import { useSurfaceMotion } from './useSurfaceMotion'
+export { ShipDrawing } from './ShipDrawing'
 
 export function BoardGrid({ cell, ariaLabel, ships = [] }: {
   cell: (coordinate: Coordinate) => ReactNode; ariaLabel: string; ships?: ShipView[]
 }) {
-  return <div className="board" role="group" aria-label={ariaLabel}>
-    <div className="board-corner" aria-hidden="true">↗</div>
+  const surface = useRef<HTMLDivElement>(null)
+  useSurfaceMotion(surface)
+  return <div ref={surface} className="board" role="group" aria-label={ariaLabel}>
+    <div className="board-sea" aria-hidden="true" />
+    <div className="board-corner" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor"><path d="m10 2 3 8-3 8-3-8 3-8ZM2 10h4m8 0h4" /></svg></div>
     {letters.map((letter) => <span className="axis axis-top" key={letter} aria-hidden="true">{letter}</span>)}
     {Array.from({ length: 10 }, (_, y) => <Fragment key={y}>
       <span className="axis axis-left" aria-hidden="true">{y + 1}</span>
@@ -32,7 +26,7 @@ export function BoardGrid({ cell, ariaLabel, ships = [] }: {
         return <div key={ship.type} title={shipNames[ship.type]} className={`ship-silhouette ship-${ship.type.toLowerCase()} ${ship.isSunk ? 'is-sunk' : ''}`} style={{
           gridColumn: `${ship.cells[0].x + 2} / span ${vertical ? 1 : ship.cells.length}`,
           gridRow: `${ship.cells[0].y + 2} / span ${vertical ? ship.cells.length : 1}`,
-        }}><ShipDrawing length={ship.cells.length} vertical={vertical} /></div>
+        }}><ShipDrawing type={ship.type} length={ship.cells.length} vertical={vertical} /></div>
       })}
     </div>
   </div>

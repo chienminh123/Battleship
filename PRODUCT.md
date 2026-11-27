@@ -14,7 +14,7 @@ ASP.NET Core .NET 8 with SignalR, React with TypeScript and Vite; delegated from
 
 Two people who want to play Battleship online together without creating accounts. One person creates a room and shares its code; the other joins with that code.
 
-Players can also practice alone against a server-controlled random opponent. The interface is in Vietnamese.
+Players can also practice alone against a server-controlled opponent with Easy (Dễ), Hard (Khó), and Annihilation (Hủy diệt) levels. The interface is in Vietnamese.
 
 ## Product Purpose
 
@@ -36,9 +36,9 @@ Players use separate browser sessions and may reconnect after a refresh or netwo
 - Players alternate one shot per turn; a shot may be a miss, hit, or sink.
 - The first player to sink all five opposing ships wins.
 - The server owns game state and validates actions. An opponent's ship locations remain private until the match ends.
-- Current room storage is in memory; no database or login is planned.
+- Rooms/chat remain in memory. Optional Identity accounts, match history, friends/invitations and Elo matchmaking are implemented in the working tree with SQLite persistence. Release acceptance is still in progress; see `ROADMAP.md` and `DEVELOPMENT_PLAN.md`.
 - A player token stored in local storage supports reconnecting to the same seat.
-- A computer opponent places a legal random fleet and fires uniformly at untried cells, without inspecting the human fleet to choose targets.
+- A computer opponent places a legal random fleet. Easy fires uniformly at untried cells; Hard searches randomly and pursues hits along likely ship directions; Annihilation scores valid remaining ship placements to guide its search. All decisions use shot history and revealed sunk cells, never the human fleet. Difficulty survives reconnect and rematch.
 - Battles emphasize the enemy board on the player's turn and the visible own fleet on the opponent's turn. Players can switch boards manually or disable automatic switching.
 - Ships are drawn as continuous silhouettes across occupied cells. Misses, hits, and sunk ships use distinct colors and symbols with a visible legend.
 - The 3D interface adds an optional Three.js ocean board with distinct ship models and shot, splash, explosion, and sinking animations. Players choose a target then confirm the shot; camera rotation is a separate mode.
@@ -47,6 +47,8 @@ Players use separate browser sessions and may reconnect after a refresh or netwo
 - On mobile, one board is shown at a time with tabs. Desktop also shows the secondary board. Quality, sound effects, ambient volume, mute, and the 2D fallback are player controls.
 
 ## Evidence on Hand
+
+The user approved room text chat, optional accounts and match history, friends/invitations, and Elo-ranked matchmaking, tracked in `ROADMAP.md`. Guest play remains available. Voice chat is excluded. The user explicitly requires accounts on the existing HTTP deployment: do not gate login on HTTPS. Password hashing and server-side session/CSRF protections remain; HTTP transport exposure is a documented limitation.
 
 The user supplied a Battleship implementation plan at `C:\Users\ASUS\Downloads\KE_HOACH_BATTLESHIP.md`. It is the confirmed source for the rules, stack, and deployment constraints.
 

@@ -16,7 +16,7 @@ export function GameSettings({ preferences, onChange }: { preferences: GamePrefe
           <option value="auto">Tự động theo thiết bị</option><option value="low">Thấp · Tiết kiệm pin</option><option value="high">Cao · Nhiều hiệu ứng</option>
         </select></label>
         <label>Âm thanh hiệu ứng <output>{Math.round(preferences.effects * 100)}%</output><input aria-label="Âm lượng hiệu ứng" type="range" min="0" max="1" step=".05" value={preferences.effects} onChange={(event) => onChange({ effects: Number(event.target.value) })} /></label>
-        <label>Tiếng biển <output>{Math.round(preferences.sea * 100)}%</output><input aria-label="Âm lượng tiếng biển" type="range" min="0" max="1" step=".01" value={preferences.sea} onChange={(event) => onChange({ sea: Number(event.target.value) })} /></label>
+        <label>Tiếng sóng biển <output>{Math.round(preferences.sea * 100)}%</output><input aria-label="Âm lượng tiếng sóng biển" type="range" min="0" max="1" step=".01" value={preferences.sea} onChange={(event) => onChange({ sea: Number(event.target.value) })} /></label>
       </div>
     </details>
   </div>
