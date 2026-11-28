@@ -16,6 +16,29 @@ function options(communityChange: Partial<Community> = {}) {
 const openFriends = () => fireEvent.click(screen.getByRole('button', { name: 'Bạn bè, 1 người online' }))
 
 describe('player code and online friends', () => {
+  it('keeps inside interactions open and dismisses the panel on an outside pointer', () => {
+    render(<PlayerPanel {...options()} />)
+    openFriends()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Chỉ online' }))
+    expect(screen.getByRole('region', { name: 'Tài khoản và bạn bè' })).toBeTruthy()
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('region', { name: 'Tài khoản và bạn bè' })).toBeNull()
+    openFriends()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByRole('region', { name: 'Tài khoản và bạn bè' })).toBeNull()
+  })
+
+  it('shows the returned opponent name and preserves date, mode and result', () => {
+    const props = options()
+    props.account.profile = { user, history: [{ id: 'match', roomCode: 'ABC234', mode: 'Friendly', state: 'Finished', oneId: user.id, winner: 'One', createdUtc: '2026-11-27T00:00:00Z', opponentName: 'Minh Anh' }], stats: [], page: 0, hasMore: false }
+    render(<PlayerPanel {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Tài khoản' }))
+    const table = screen.getByRole('table')
+    expect(within(table).getByRole('columnheader', { name: 'Đối thủ' })).toBeTruthy()
+    expect(table.textContent).toContain('Minh Anh')
+    expect(table.textContent).toContain('Giao hữu')
+    expect(table.textContent).toContain('Thắng')
+  })
   it('copies the player code and reports clipboard failure without a false success', async () => {
     vi.mocked(copyText).mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('denied'))
     render(<PlayerPanel {...options()} />)

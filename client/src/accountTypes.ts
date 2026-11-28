@@ -13,6 +13,7 @@ export type Community = {
 }
 export type MatchMode = 'Bot' | 'Friendly' | 'Ranked'
 export type MatchHistory = {
+  opponentName?: string
   id: string; roomCode: string; mode: MatchMode; state: 'Waiting' | 'Playing' | 'Finished' | 'Cancelled' | 'Interrupted'
   oneId?: string | null; twoId?: string | null; winner?: 'One' | 'Two' | null
   createdUtc: string; finishedUtc?: string | null; reason?: string | null

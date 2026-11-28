@@ -101,7 +101,7 @@ public static class AccountApi
             if (user is null) return Results.Unauthorized();
             page = Math.Clamp(page, 0, 10000);
             var matches = db.Matches.AsNoTracking().Where(match => match.OneId == user.Id || match.TwoId == user.Id);
-            var history = await matches.OrderByDescending(match => match.CreatedUtc).Skip(page * 20).Take(20).ToArrayAsync();
+            var history = await MatchHistoryQuery.ForPlayer(db, user.Id, page).ToArrayAsync();
             var matchIds = history.Select(match => match.Id).ToArray();
             var ratingChanges = await db.RatingChanges.AsNoTracking().Where(change => change.AccountId == user.Id && matchIds.Contains(change.MatchId))
                 .Select(change => new { change.MatchId, change.Before, change.After }).ToArrayAsync();

@@ -256,6 +256,9 @@ export function createOceanScene(mount: HTMLDivElement) {
     const halfHeight = Math.max(extentY, extentX / aspect) * 1.025
     camera.left = -halfHeight * aspect; camera.right = halfHeight * aspect
     camera.top = halfHeight; camera.bottom = -halfHeight; camera.updateProjectionMatrix()
+    // Resizing clears the WebGL buffer after this frame's rAF already drew, and the
+    // throttled loop may skip several frames; redraw now so a board swap never flashes empty.
+    if (!lost) renderer.render(scene, camera)
   }
   const observer = new ResizeObserver(frame); observer.observe(mount)
   let inView = true

@@ -52,6 +52,29 @@ public sealed class PlatformTests
         public void Dispose() { _provider.Dispose(); File.Delete(_path); }
     }
 
+    [Fact]
+    public void History_resolves_opponent_from_either_seat_and_keeps_bot_and_guest_matches()
+    {
+        using var fixture = new Fixture();
+        var (one, _) = fixture.User("Minh"); var (two, _) = fixture.User("Lan");
+        fixture.Db(db => {
+            db.Matches.AddRange(
+                new MatchRecord { Id = "one", RoomCode = "ABC234", OneId = one.Id, TwoId = two.Id, Mode = MatchMode.Friendly },
+                new MatchRecord { Id = "two", RoomCode = "DEF234", OneId = two.Id, TwoId = one.Id, Mode = MatchMode.Ranked },
+                new MatchRecord { Id = "guest", RoomCode = "GHI234", OneId = one.Id, Mode = MatchMode.Friendly },
+                new MatchRecord { Id = "bot", RoomCode = "JKL234", OneId = one.Id, Mode = MatchMode.Bot },
+                new MatchRecord { Id = "private", RoomCode = "MNO234", OneId = two.Id, Mode = MatchMode.Bot });
+            db.SaveChanges(); return 0;
+        });
+        var history = fixture.Db(db => MatchHistoryQuery.ForPlayer(db, one.Id, 0).ToArray());
+        Assert.Equal(4, history.Length);
+        Assert.Equal("Lan", history.Single(match => match.Id == "one").OpponentName);
+        Assert.Equal("Lan", history.Single(match => match.Id == "two").OpponentName);
+        Assert.Equal("Máy", history.Single(match => match.Id == "bot").OpponentName);
+        Assert.Equal("Người chơi khách", history.Single(match => match.Id == "guest").OpponentName);
+        Assert.Empty(fixture.Db(db => MatchHistoryQuery.ForPlayer(db, one.Id, 1).ToArray()));
+    }
+
     [Theory]
     [InlineData(1000, 1000, true, 16)]
     [InlineData(1000, 1000, false, -16)]

@@ -345,3 +345,33 @@ kbd { font: 13px var(--mono); border: 1px solid #a6c6ba; padding: 3px 7px; borde
   .ocean-viewport { max-height: max(200px, calc(100dvh - 150px)); min-height: 0; }
   .battle-view .game-header > p,.battle-view .turn-banner > span { display: none; }
 }
+
+/* Compact battle screen on phones: keep the board and the Fire button above the
+   fold. The turn banner carries the turn + bot level, the duplicated heading and
+   board label stay for screen readers only, and the legend moves below the board. */
+.mode-short,.turn-banner-meta { display: none; }
+@media (max-width: 760px) {
+  .battle-view { display: flex; flex-direction: column; }
+  .battle-view > .shot-legend { order: 1; margin: 14px 0 0; }
+  .battle-view > .battle-footer { order: 2; }
+  .battle-view .game-header,.battle-view .board-primary .board-label { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .workspace:has(> .battle-view) > .bot-match-note { display: none; }
+  .battle-view .turn-banner { flex-wrap: nowrap; justify-content: space-between; align-items: center; min-height: 38px; padding: 7px 12px; }
+  .battle-view .turn-banner strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .turn-banner-meta { display: block; flex-shrink: 0; font-size: 12px; opacity: .85; }
+  .battle-view .battle-toolbar { margin: 8px 0; }
+  .battle-view .board-primary .ocean-tools { padding: 4px 6px; }
+  .battle-view .board-primary .ocean-tools button { min-height: 34px; padding: 5px 9px; }
+  .battle-view .board-primary .fire-controls { margin-top: 8px; }
+}
+@media (max-width: 560px) {
+  .in-game .topbar { min-height: 0; }
+  .in-game .brand > span:last-child { display: none; }
+  .in-game .mode-long { display: none; }
+  .in-game .mode-short { display: inline; }
+  .in-game .topbar-meta .mode-button { min-width: 38px; }
+}
+@media (max-width: 360px) {
+  .in-game .settings-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .in-game .topbar-meta .leave-button { padding-inline: 6px; }
+}

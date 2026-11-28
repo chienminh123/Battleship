@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useDismissOutside } from './useDismissOutside'
 import type { useAccount } from './useAccount'
 import { modeNames } from './accountTypes'
 import { botDifficultyNames } from './i18n'
@@ -60,7 +61,9 @@ function PlayerPanelContent({ account, inRoom, connected }: Props) {
   }, [open, userId, tab, loadProfile, loadLeaderboard])
 
   const close = () => { setOpen(false); setPassword(''); setCurrentPassword(''); setNewPassword('') }
-  return <div className="player-menu" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); close() } }}>
+  const menu = useRef<HTMLDivElement>(null)
+  useDismissOutside(menu, open, close)
+  return <div ref={menu} className="player-menu" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); close() } }}>
     <button className="account-toggle" type="button" aria-label={`Tài khoản${waiting ? `, ${waiting} lời mời` : ''}`} aria-expanded={open} aria-controls="player-panel" onClick={() => setOpen((current) => !current)}>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21v-2a8 8 0 0 1 16 0v2" /></svg>
       <span>{user ? user.displayName : 'Tài khoản'}</span>{waiting > 0 && <b>{waiting}</b>}
@@ -103,8 +106,8 @@ function PlayerPanelContent({ account, inRoom, connected }: Props) {
                 <p>{stats.wins} thắng · {stats.losses} thua · {Math.round(100 * stats.wins / stats.played)}% thắng</p></div>
             </li>)}</ul>}
             <h3>Lịch sử trận</h3>
-            {!profile?.history.length ? <p className="form-note">Các trận mới của tài khoản sẽ hiện ở đây.</p> : <><table className="match-history"><thead><tr><th>Ngày</th><th>Chế độ</th><th>Kết quả</th></tr></thead><tbody>{profile.history.map((match) => <tr key={match.id}>
-              <td>{new Date(match.createdUtc).toLocaleDateString('vi-VN')}</td><td>{modeNames[match.mode]}</td><td>{match.state === 'Finished' ? (match.oneId === user.id ? match.winner === 'One' : match.winner === 'Two') ? 'Thắng' : 'Thua' : match.state === 'Interrupted' ? 'Gián đoạn' : match.state === 'Cancelled' ? 'Đã hủy' : 'Chưa kết thúc'}</td>
+            {!profile?.history.length ? <p className="form-note">Các trận mới của tài khoản sẽ hiện ở đây.</p> : <><table className="match-history"><thead><tr><th>Ngày / Chế độ</th><th>Đối thủ</th><th>Kết quả</th></tr></thead><tbody>{profile.history.map((match) => <tr key={match.id}>
+              <td><time dateTime={match.createdUtc}>{new Date(match.createdUtc).toLocaleDateString('vi-VN')}</time><small>{modeNames[match.mode]}</small></td><td className="history-opponent">{match.opponentName ?? (match.mode === 'Bot' ? 'Máy' : 'Người chơi khách')}</td><td>{match.state === 'Finished' ? (match.oneId === user.id ? match.winner === 'One' : match.winner === 'Two') ? 'Thắng' : 'Thua' : match.state === 'Interrupted' ? 'Gián đoạn' : match.state === 'Cancelled' ? 'Đã hủy' : 'Chưa kết thúc'}</td>
             </tr>)}</tbody></table><div className="player-pagination"><button disabled={busy || profile.page === 0} onClick={() => void loadProfile(profile.page - 1)}>Trước</button><span>Trang {profile.page + 1}</span><button disabled={busy || !profile.hasMore} onClick={() => void loadProfile(profile.page + 1)}>Sau</button></div></>}
             <details className="account-options"><summary>Đổi tên và mật khẩu</summary>
               <form className="account-form" onSubmit={(event) => { event.preventDefault(); void account.updateName(newName) }}><label>Tên hiển thị mới<input value={newName} onChange={(event) => setNewName(event.target.value)} maxLength={32} required /></label><button disabled={busy}>Lưu tên</button></form>

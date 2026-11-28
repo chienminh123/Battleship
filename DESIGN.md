@@ -41,6 +41,9 @@ Kế thừa biến trong `client/src/index.css`: nền `#09191d`, chữ `#e9eee6
 
 ## Mã người chơi và bạn bè
 
+- Hồ sơ hiển thị cột Đối thủ trong lịch sử trận, lấy tên hiển thị hiện tại từ tài khoản đối thủ ở cả hai ghế. Trận máy/khách có nhãn riêng; ngày và chế độ gộp vào một cột cho màn nhỏ. Không thay đổi schema dữ liệu trận cũ.
+- Bảng tài khoản/bạn bè và Tùy chỉnh đóng khi pointer ở ngoài hoặc nhấn Escape; tương tác trong bảng giữ nguyên. Bảng tài khoản xóa bản nháp mật khẩu khi đóng.
+
 - Mã người chơi có nút Sao chép với trạng thái thành công/lỗi; dùng Clipboard API và fallback cho HTTP. Mã vẫn chọn thủ công được.
 - Nút Bạn bè trên thanh đầu mở thẳng danh sách, kèm số bạn online sẵn sàng chơi. Danh sách ưu tiên Online → Busy → Offline, có lọc Chỉ online và phân biệt trạng thái bằng chữ lẫn chấm màu.
 - Nút Mời chơi gửi qua API lời mời hiện có, khóa khi offline/đang đấu/tìm trận hoặc đã có lời mời. Xóa bạn/Chặn gom trong Thêm. Bảng cuộn độc lập, không tràn ngang ở 320px.
@@ -50,3 +53,14 @@ Kế thừa biến trong `client/src/index.css`: nền `#09191d`, chữ `#e9eee6
 - 2D trộn hai lớp texture trôi chậm dưới lưới; 3D tăng chuyển động gợn sóng, phản sáng và bọt ở đỉnh sóng, thân tàu nhấp nhô nhẹ trong khi bóng tiếp xúc giữ nguyên. Không thêm geometry hay draw call cho hiệu ứng nước.
 - Tạm dừng mặt nước khi bàn ra khỏi viewport hoặc tab bị ẩn. Chế độ giảm chuyển động của hệ điều hành giữ biển tĩnh và bỏ nhấp nhô.
 - Tiếng sóng stereo tổng hợp cục bộ theo chu kỳ dâng/rút 18 giây, nối vòng bằng crossfade. Phát ở sảnh, khi xếp tàu và trong trận sau tương tác đầu tiên; khởi đầu ở âm lượng 0 rồi tăng nhẹ. Nút âm thanh tắt toàn bộ, thanh “Tiếng sóng biển” chỉnh riêng. AudioContext tạm ngừng khi tab bị ẩn, tiếp tục bằng cùng một vòng âm thanh khi quay lại.
+
+## Đổi bàn chậm hơn, không nháy — 28/11/2026
+
+- Sau hiệu ứng của mỗi phát bắn (trừ phát kết thúc trận), bàn giữ nguyên thêm 900 ms rồi mới tự đổi, trên cả điện thoại và desktop. Sự kiện kế tiếp chờ hết khoảng giữ này. Chỉ áp dụng khi Tự đổi theo lượt đang bật. Không dùng thẻ thông báo toàn màn hình (đã thử, bỏ vì thừa).
+- Lượt đổi cùng lúc với sự kiện bắn được xếp hàng; khi hiệu ứng đang chờ bắt đầu thì giữ bàn hiện tại, không nhảy sang bàn kia rồi quay lại.
+- Canvas 3D vẽ lại ngay khi đổi kích thước (đổi bàn chính/phụ, xoay máy), vì đổi kích thước xóa bộ đệm WebGL và vòng vẽ có giới hạn FPS có thể bỏ vài khung.
+
+## Màn bắn gọn trên điện thoại — 28/11/2026
+
+- ≤760px: banner lượt gánh cả tiêu đề và mức máy (Máy · Dễ); tiêu đề trận và nhãn bàn chính chỉ còn cho trình đọc màn hình; chú thích chuyển xuống dưới nút Bắn. Ở 375×812, bàn bắt đầu ~220px và nút Bắn nằm trong màn hình đầu tiên.
+- ≤560px trong trận: thanh đầu một hàng, chỉ giữ biểu tượng logo, nút đổi bàn ghi chế độ hiện tại (3D/2D). ≤360px: Tùy chỉnh chỉ còn biểu tượng. Vẫn cho xuống dòng nếu thiếu chỗ, không tràn ngang ở 320px.

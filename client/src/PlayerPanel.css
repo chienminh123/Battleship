@@ -1,4 +1,9 @@
 .player-menu { position: relative; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.match-history { table-layout: fixed; }
+.match-history th:first-child { width: 34%; }.match-history th:last-child { width: 25%; }
+.match-history td { overflow-wrap: anywhere; vertical-align: top; }
+.match-history time { white-space: nowrap; font-size: 11px; }
+.match-history small { display: block; margin-top: 5px; color: var(--paper-muted); font-size: 11px; }
 .friends-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 10px; border: 1px solid #77998f; border-radius: 4px; background: #17383a; color: var(--paper); cursor: pointer; }
 .friends-toggle b { font-size: 12px; color: var(--aqua); font-variant-numeric: tabular-nums; }
 .player-code-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0; }

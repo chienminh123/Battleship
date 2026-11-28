@@ -19,6 +19,9 @@ import { PlacementScreen } from './screens/PlacementScreen'
 import { BattleScreen } from './screens/BattleScreen'
 import { GameOverScreen } from './screens/GameOverScreen'
 
+// Extra time the result stays on screen before the boards switch.
+const SWITCH_DELAY_MS = 900
+
 function App() {
   const account = useAccount()
   const { state, createRoom, createBotRoom, joinRoom, joinReserved, submitFleet, fire, rematch, leaveRoom, retryConnection, sendChat, surrender } = useGameHub(account.identityVersion)
@@ -47,7 +50,9 @@ function App() {
     return () => { disposed = true; clearTimeout(timer) }
   }, [state.phase, state.matchId, accountId, refreshProfile])
   const { preferences, update: updatePreferences } = useGamePreferences()
-  const { activeEvent, presenting } = useBattleTimeline(state.liveEvents)
+  // Linger on each result instead of swapping boards the instant the effect ends.
+  const [autoSwitch, setAutoSwitch] = useState(true)
+  const { activeEvent, heldEvent, presenting } = useBattleTimeline(state.liveEvents, autoSwitch ? SWITCH_DELAY_MS : 0)
   const showResult = state.phase === 'Finished' && !presenting
   useEffect(() => {
     battleSound.configure(preferences)
@@ -124,7 +129,7 @@ function App() {
       <div className="topbar-meta"><span className={`connection-dot ${state.connected ? 'is-live' : ''}`} />
         <span>{state.connected ? 'ĐÃ KẾT NỐI' : state.restoring ? 'ĐANG KHÔI PHỤC' : 'ĐANG KẾT NỐI'}</span>
         {hasRoom && <><span className="meta-divider" /><span className="room-code-meta">{state.isBot ? 'ĐẤU VỚI MÁY' : <>PHÒNG {state.roomCode}<CopyRoomButton onCopy={copyRoomCode} compact /></>}</span>
-          <button className="mode-button" aria-label="Chuyển giao diện bàn cờ" aria-pressed={threeDimensional} onClick={() => setBoardMode(!threeDimensional)}>{threeDimensional ? '3D / 2D' : '2D / 3D'}</button>
+          <button className="mode-button" aria-label="Chuyển giao diện bàn cờ" aria-pressed={threeDimensional} onClick={() => setBoardMode(!threeDimensional)}><span className="mode-long">{threeDimensional ? '3D / 2D' : '2D / 3D'}</span><span className="mode-short" aria-hidden="true">{threeDimensional ? '3D' : '2D'}</span></button>
           {state.phase === 'Playing' && <button className="leave-button" disabled={busy || !state.connected} onClick={() => setExitRequest({ surrender: true, room: state.roomCode, phase: state.phase })}>Đầu hàng</button>}
           <button className="leave-button" disabled={busy || !state.connected} onClick={() => setExitRequest({ surrender: false, room: state.roomCode, phase: state.phase })}>Rời trận</button></>}
         <PlayerPanel account={account} inRoom={hasRoom} connected={state.connected && state.identityVersion === account.identityVersion} />
@@ -151,7 +156,7 @@ function App() {
           onPlace={(cell) => updateFleet((current) => current.map((ship) => ship.type === selectedShip ? { ...ship, start: cell } : ship))}
           onRotate={rotate} onRandom={() => updateFleet(randomFleet)} onSubmit={() => run(() => submitFleet(fleet))}
           submitted={state.fleetSubmitted} opponentReady={state.opponentFleetSubmitted} busy={busy || !state.connected} threeDimensional={threeDimensional} quality={preferences.quality} onFallback={useTwoDimensionalFallback} />}
-        {hasRoom && (state.phase === 'Playing' || (state.phase === 'Finished' && !showResult)) && <BattleScreen state={state} busy={busy} activeEvent={activeEvent} presenting={presenting} quality={preferences.quality} threeDimensional={threeDimensional} onFallback={useTwoDimensionalFallback} onFire={(cell) => run(async () => {
+        {hasRoom && (state.phase === 'Playing' || (state.phase === 'Finished' && !showResult)) && <BattleScreen state={state} busy={busy} activeEvent={activeEvent} heldEvent={heldEvent} autoSwitch={autoSwitch} onAutoSwitch={setAutoSwitch} presenting={presenting} quality={preferences.quality} threeDimensional={threeDimensional} onFallback={useTwoDimensionalFallback} onFire={(cell) => run(async () => {
           const result = await fire(cell); if (!result.accepted) throw new Error(shotNames[result.status])
         })} />}
         {hasRoom && showResult && <GameOverScreen state={state} profile={account.profile} busy={busy || !state.connected} quality={preferences.quality} threeDimensional={threeDimensional} onFallback={useTwoDimensionalFallback} onRematch={() => run(rematch)} onLeave={() => void run(leaveCurrentRoom)} />}

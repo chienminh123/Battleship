@@ -3,24 +3,29 @@ import { BoardGrid, ShotMark } from '../BoardGrid'
 import { OceanBoard3D } from '../Board3D'
 import { GameHeader, Legend } from '../GameUi'
 import { cellKey, cellName } from '../coordinates'
-import { shipNames, shotNames } from '../i18n'
+import { botDifficultyNames, shipNames, shotNames } from '../i18n'
 import { revealedShips, shotStatus, sunkCellKeys } from '../battlePresentation'
 import type { BattleEvent, GraphicsQuality } from '../battlePresentation'
 import type { Coordinate, ShotHistoryItem } from '../types'
 import type { HubState } from '../useGameHub'
 
-export function BattleScreen({ state, busy, threeDimensional, quality, activeEvent, presenting, onFallback, onFire }: {
+export function BattleScreen({ state, busy, threeDimensional, quality, activeEvent, heldEvent, presenting, autoSwitch, onAutoSwitch: setAutoSwitch, onFallback, onFire }: {
   state: HubState; busy: boolean; threeDimensional: boolean; quality: GraphicsQuality
-  activeEvent?: BattleEvent; presenting: boolean; onFallback: () => void; onFire: (cell: Coordinate) => void
+  activeEvent?: BattleEvent; heldEvent?: BattleEvent; presenting: boolean
+  autoSwitch: boolean; onAutoSwitch: (enabled: boolean) => void
+  onFallback: () => void; onFire: (cell: Coordinate) => void
 }) {
   const [focus, setFocus] = useState<'enemy' | 'own'>(state.isYourTurn ? 'enemy' : 'own')
-  const [autoSwitch, setAutoSwitch] = useState(true)
   const [selected, setSelected] = useState<Coordinate | null>(null)
   useEffect(() => {
     if (!autoSwitch) return
-    const timer = window.setTimeout(() => setFocus(activeEvent?.board ?? (state.isYourTurn ? 'enemy' : 'own')), 0)
+    // The turn flips in the same update that queues the shot effect; while an effect is
+    // queued but not yet started, keep the current board instead of flashing to the other one.
+    const board = (activeEvent ?? heldEvent)?.board ?? (presenting ? undefined : state.isYourTurn ? 'enemy' : 'own')
+    if (!board) return
+    const timer = window.setTimeout(() => setFocus(board), 0)
     return () => window.clearTimeout(timer)
-  }, [state.isYourTurn, activeEvent, autoSwitch])
+  }, [state.isYourTurn, activeEvent, heldEvent, presenting, autoSwitch])
   const ownShips = state.ownBoard?.ships ?? []
   const ownCells = new Map(ownShips.flatMap((ship) => ship.cells.map((cell) => [cellKey(cell), ship])))
   const shots = new Map(state.shots.map((shot) => [cellKey(shot.coordinate), shot]))
@@ -48,6 +53,7 @@ export function BattleScreen({ state, busy, threeDimensional, quality, activeEve
     <GameHeader title={state.isYourTurn ? 'Đến lượt bạn bắn' : state.isBot ? 'Máy đang ngắm bắn' : 'Đối thủ đang ngắm bắn'} detail={state.isYourTurn ? 'Chọn một ô trên biển đối thủ, rồi nhấn Bắn.' : 'Theo dõi vị trí và tình trạng đội tàu của bạn.'} />
     <div className={`turn-banner ${state.isYourTurn ? 'your-turn' : ''}`} role="status" aria-live="polite">
       <strong>{!state.connected ? 'Mất kết nối · Đang thử kết nối lại' : state.isYourTurn ? 'Lượt của bạn' : state.isBot ? 'Lượt của máy' : 'Lượt đối thủ'}</strong><span>{state.message}</span>
+      {state.isBot && <small className="turn-banner-meta">Máy · {botDifficultyNames[state.botDifficulty ?? 'Easy']}</small>}
     </div>
     <div className="battle-toolbar"><div className="board-tabs" role="group" aria-label="Chọn bản đồ chính">
       <button aria-pressed={focus === 'enemy'} onClick={() => chooseFocus('enemy')}>Ngắm bắn đối thủ</button>
